@@ -44,10 +44,36 @@ def step(msg: str) -> None:
     print(f"\n\033[1m==>\033[0m {msg}", flush=True)
 
 
+def funnel_reserved_ports() -> set[int]:
+    """Ports already spoken for by Tailscale funnel/serve mounts.
+
+    A port can be unbound right now and still belong to something: this machine
+    routes public paths to local ports, and a mount whose service happens to be
+    down looks free to a connect() probe. Taking such a port would silently put
+    this workspace behind someone else's public URL.
+    """
+    if not shutil.which("tailscale"):
+        return set()
+    try:
+        out = subprocess.run(
+            ["tailscale", "funnel", "status"],
+            capture_output=True, text=True, timeout=15,
+        ).stdout
+    except (OSError, subprocess.SubprocessError):
+        return set()
+    return {int(p) for p in re.findall(r"127\.0\.0\.1:(\d+)", out)}
+
+
 def free_port(preferred: int | None = None) -> int:
-    """First port nothing is listening on. Deterministic, so reruns are stable."""
+    """First port nothing is listening on and nothing has reserved."""
+    reserved = funnel_reserved_ports()
+    if reserved and preferred is None:
+        print(f"  avoiding {len(reserved)} port(s) already mapped by tailscale funnel")
+
     candidates = [preferred] if preferred else list(PORT_RANGE)
     for port in candidates:
+        if port in reserved and preferred is None:
+            continue
         with socket.socket() as sock:
             sock.settimeout(0.5)
             if sock.connect_ex(("127.0.0.1", port)) != 0:
