@@ -33,9 +33,11 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import config  # noqa: E402
 from lib.childenv import assert_keyless  # noqa: E402
 
-LABEL = "com.trifactor.directive-runner"
+# Derived from the folder name, so a duplicated workspace gets its own service
+# instead of hijacking this one's. See config.workspace_slug().
+LABEL = config.LAUNCHD_LABEL
 PLIST_PATH = Path.home() / "Library" / "LaunchAgents" / f"{LABEL}.plist"
-LOG_DIR = Path.home() / "Library" / "Logs" / "directive-runner"
+LOG_DIR = Path.home() / "Library" / "Logs" / config.workspace_slug()
 DOMAIN = f"gui/{os.getuid()}"
 SERVICE = f"{DOMAIN}/{LABEL}"
 
@@ -106,6 +108,25 @@ def launchctl(*args: str, check: bool = False) -> subprocess.CompletedProcess:
     return subprocess.run(["launchctl", *args], capture_output=True, text=True, check=check)
 
 
+def port_holder(port: int) -> str | None:
+    """Who is listening on `port`? A label, a warning string, or None if free.
+
+    Guards the other half of the duplicate-workspace problem: unique labels stop
+    launchd collisions, but two receivers still cannot share a socket.
+    """
+    import socket
+
+    with socket.socket() as sock:
+        sock.settimeout(1)
+        if sock.connect_ex(("127.0.0.1", port)) != 0:
+            return None
+
+    info = health(port, timeout=3)
+    if info and info.get("label"):
+        return info["label"]
+    return "something that is not a directive-runner receiver"
+
+
 def health(port: int, timeout: int = 5) -> dict | None:
     try:
         with urllib.request.urlopen(f"http://127.0.0.1:{port}/health", timeout=timeout) as resp:
@@ -152,6 +173,16 @@ def install(port: int, skip_probe: bool) -> int:
         subprocess.run(["/bin/sleep", "0.25"])
     else:
         print(f"warning: {SERVICE} still loaded after bootout; bootstrap may fail", file=sys.stderr)
+
+    # Our own service is gone by now, so anything still on the port is foreign.
+    if (holder := port_holder(port)) is not None:
+        print(
+            f"\n✗ port {port} is already held by {holder}.\n"
+            f"  This workspace ({LABEL}) needs its own port. Set WEBHOOK_PORT in\n"
+            f"  {config.ENV_FILE} to a free one and re-run, or use --port.",
+            file=sys.stderr,
+        )
+        return 1
 
     proc = launchctl("bootstrap", DOMAIN, str(PLIST_PATH))
     if proc.returncode != 0:
@@ -220,7 +251,7 @@ def status(port: int) -> int:
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    ap.add_argument("--port", type=int, default=int(config.get("WEBHOOK_PORT", "8787")))
+    ap.add_argument("--port", type=int, default=config.WEBHOOK_PORT)
     ap.add_argument("--print", dest="show", action="store_true", help="print the plist, change nothing")
     ap.add_argument("--status", action="store_true")
     ap.add_argument("--uninstall", action="store_true")

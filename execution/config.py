@@ -9,6 +9,7 @@ spawn a subprocess.
 from __future__ import annotations
 
 import os
+import re
 import sys
 from pathlib import Path
 
@@ -63,6 +64,27 @@ def parked_api_key() -> str | None:
 # Model for directive runs. Passed to children as ANTHROPIC_MODEL, never as a
 # --model flag (CLAUDE.md rule 3).
 MODEL = os.environ.get("ANTHROPIC_MODEL", "claude-opus-5")
+
+
+def workspace_slug() -> str:
+    """A launchd-safe identifier derived from this workspace's folder name.
+
+    Copies of this repo must not share an identity: launchd keys services by
+    label, so two workspaces using one label means installing the second
+    silently boots out the first and takes over its port. Deriving the label
+    from the directory keeps duplicates independent.
+    """
+    slug = re.sub(r"[^a-z0-9-]+", "-", ROOT.name.lower()).strip("-")
+    return slug or "workspace"
+
+
+# Same value the installer writes into the plist and the receiver reports on
+# /health, so a mismatch between the two is impossible.
+LAUNCHD_LABEL = f"com.trifactor.{workspace_slug()}"
+
+# Per-workspace, so duplicates do not fight over one socket. bootstrap.py picks
+# a free port and writes it here; 8787 is only the single-workspace default.
+WEBHOOK_PORT = int(os.environ.get("WEBHOOK_PORT", "8787"))
 
 
 def billed_api_gate_open() -> bool:

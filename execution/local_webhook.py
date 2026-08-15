@@ -89,7 +89,14 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self) -> None:  # noqa: N802 - BaseHTTPRequestHandler API
         route = urlparse(self.path).path.rstrip("/") or "/"
         if route == "/health":
-            self._send(200, {"ok": True, "model": config.MODEL})
+            # label/workspace let the installer tell "this is me" from "another
+            # workspace already owns this port".
+            self._send(200, {
+                "ok": True,
+                "model": config.MODEL,
+                "label": config.LAUNCHD_LABEL,
+                "workspace": str(config.ROOT),
+            })
         elif route == "/webhooks":
             hooks = load_webhooks()
             self._send(200, {"webhooks": [
@@ -219,7 +226,7 @@ def startup_selfcheck() -> None:
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    ap.add_argument("--port", type=int, default=int(config.get("WEBHOOK_PORT", "8787")))
+    ap.add_argument("--port", type=int, default=config.WEBHOOK_PORT)
     ap.add_argument("--host", default="127.0.0.1", help="keep this loopback; tunnel for public access")
     args = ap.parse_args()
 
