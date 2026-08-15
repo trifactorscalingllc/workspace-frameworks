@@ -149,6 +149,22 @@ def copy_google(donor: Path | None) -> None:
     print("  same OAuth client, so no new consent is needed")
 
 
+def arm_first_launch() -> None:
+    """Drop the marker that makes VS Code open a Claude tab on first launch.
+
+    The rule that consumes it lives in .vscode/settings.json and deletes the
+    marker as it fires, so this is armed once per fresh workspace rather than
+    on every window open — otherwise a restored Claude tab and a freshly
+    created one would pile up.
+    """
+    vscode_dir = ROOT / ".vscode"
+    if not vscode_dir.is_dir():
+        return
+    marker = vscode_dir / ".open-claude-on-first-launch"
+    marker.write_text("Deleted automatically the first time this workspace opens.\n")
+    print("  armed: Claude opens as a tab the first time this workspace is opened")
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--from", dest="donor", help="workspace to copy Google OAuth files from")
@@ -171,6 +187,9 @@ def main() -> int:
         print("  skipped (--no-google)")
     else:
         copy_google(find_donor(args.donor))
+
+    step("Editor")
+    arm_first_launch()
 
     step("Preflight")
     rc = subprocess.run(

@@ -3,6 +3,9 @@
   // missing the thing it is built around.
   "recommendations": [
     "anthropic.claude-code",
+    // Runs the first-launch rule in settings.json that opens the Claude tab.
+    // Without it the workspace still works; Claude is Cmd+Shift+Esc away.
+    "gabrielgrinberg.auto-run-command",
     "ms-python.python"
   ]
 }

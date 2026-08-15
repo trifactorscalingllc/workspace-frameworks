@@ -13,3 +13,7 @@ token.json
 
 .DS_Store
 *.pyc
+
+# Armed by bootstrap.py, consumed on this workspace's first open. Per-copy
+# state, so it must never be committed or every clone would inherit it spent.
+.vscode/.open-claude-on-first-launch
