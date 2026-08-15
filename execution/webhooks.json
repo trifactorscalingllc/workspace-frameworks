@@ -1,10 +1,22 @@
 {
-  "_comment": "slug -> directive mapping. Each webhook maps to exactly ONE directive with scoped tool access. Tools must be one of: send_email, read_sheet, update_sheet.",
+  "_comment": "slug -> directive mapping. Each webhook maps to exactly ONE directive with scoped tool access. Tools must be keys of TOOLS in execution/run_directive.py: drive_search, drive_read (connector-backed, no credentials file) or send_email, read_sheet, update_sheet (Python, need Google OAuth token.json). The grant is passed to the CLI as --allowedTools, so it is enforced.",
   "webhooks": {
     "daily_digest": {
       "directive": "daily_digest",
       "description": "Summarize a tracking sheet and email the digest.",
-      "tools": ["read_sheet", "send_email"],
+      "tools": [
+        "read_sheet",
+        "send_email"
+      ],
+      "enabled": true
+    },
+    "drive_inventory": {
+      "directive": "drive_inventory",
+      "description": "Read-only inventory of Google Sheets in Drive, via the claude.ai Drive connector.",
+      "tools": [
+        "drive_search",
+        "drive_read"
+      ],
       "enabled": true
     }
   }

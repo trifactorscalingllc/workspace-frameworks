@@ -22,13 +22,68 @@ from pathlib import Path
 import config
 from lib.childenv import assert_keyless, build_child_env
 
-# Tool names a directive may be granted. Keep in sync with CLAUDE.md and with
-# the scripts that actually exist in execution/tools/.
-AVAILABLE_TOOLS = {
-    "send_email": "python execution/tools/send_email.py --to <addr> --subject <s> --body <b>",
-    "read_sheet": "python execution/tools/read_sheet.py --sheet-id <id> --range <A1:Z>",
-    "update_sheet": "python execution/tools/update_sheet.py --sheet-id <id> --range <A1:Z> --values-json <json>",
+# Tool names a directive may be granted.
+#
+# `allow` is the real enforcement: a non-interactive `claude -p` cannot answer a
+# permission prompt, so anything not passed via --allowedTools is simply blocked
+# and the run fails having done nothing. The grant in webhooks.json therefore
+# becomes an actual capability boundary, not just a line in the prompt.
+#
+# `needs` names a prerequisite that may not be satisfied yet; run() refuses a
+# tool whose prerequisite is missing rather than letting the run discover it.
+TOOLS = {
+    # --- Python tools (Layer 3 proper: deterministic, testable) --------------
+    "send_email": {
+        "how": f"{config.PYTHON} execution/tools/send_email.py --to <addr> --subject <s> --body <b> [--html] [--dry-run]",
+        "allow": [f"Bash({config.PYTHON} execution/tools/send_email.py:*)"],
+        "needs": "google_oauth",
+    },
+    "read_sheet": {
+        "how": f"{config.PYTHON} execution/tools/read_sheet.py --sheet-id <id> --range <A1:Z> [--header]",
+        "allow": [f"Bash({config.PYTHON} execution/tools/read_sheet.py:*)"],
+        "needs": "google_oauth",
+    },
+    "update_sheet": {
+        "how": f"{config.PYTHON} execution/tools/update_sheet.py --sheet-id <id> --range <A1:Z> --values-json <json> [--append]",
+        "allow": [f"Bash({config.PYTHON} execution/tools/update_sheet.py:*)"],
+        "needs": "google_oauth",
+    },
+    # --- Connector tools (the claude.ai Google OAuth already on this Mac) ----
+    # These need no credentials.json: the account is already authorized, and a
+    # headless child inherits the connectors. Read-only.
+    "drive_search": {
+        "how": "Use the Google Drive connector to find files by name, type, or recency.",
+        "allow": [
+            "mcp__claude_ai_Google_Drive__search_files",
+            "mcp__claude_ai_Google_Drive__list_recent_files",
+            "mcp__claude_ai_Google_Drive__get_file_metadata",
+        ],
+        "needs": None,
+    },
+    "drive_read": {
+        "how": (
+            "Use the Google Drive connector to read a file's contents. A Google "
+            "Sheet comes back as text/CSV — parse it rather than assuming cells."
+        ),
+        "allow": [
+            "mcp__claude_ai_Google_Drive__read_file_content",
+            "mcp__claude_ai_Google_Drive__download_file_content",
+            "mcp__claude_ai_Google_Drive__get_file_metadata",
+        ],
+        "needs": None,
+    },
 }
+
+
+def unmet_prerequisite(tool: str) -> str | None:
+    """Return a human-readable reason a granted tool cannot run yet, or None."""
+    if TOOLS[tool].get("needs") == "google_oauth" and not config.TOKEN_FILE.exists():
+        return (
+            f"{tool} needs Google OAuth: {config.TOKEN_FILE.name} is missing. Mint it "
+            "once from an interactive shell, or use the connector-backed tools "
+            "(drive_search, drive_read), which need no credentials file."
+        )
+    return None
 
 
 def directive_path(slug: str) -> Path:
@@ -42,10 +97,20 @@ def directive_path(slug: str) -> Path:
 
 def validate_tools(tools: list[str]) -> list[str]:
     """Reject anything not in the grant list. Returns the tools unchanged."""
-    unknown = [t for t in tools if t not in AVAILABLE_TOOLS]
+    unknown = [t for t in tools if t not in TOOLS]
     if unknown:
-        raise ValueError(f"unknown tools: {unknown}. Available: {sorted(AVAILABLE_TOOLS)}")
+        raise ValueError(f"unknown tools: {unknown}. Available: {sorted(TOOLS)}")
     return tools
+
+
+def allowlist_for(tools: list[str]) -> list[str]:
+    """The permission rules a run needs, deduplicated and order-stable."""
+    rules: list[str] = []
+    for tool in tools:
+        for rule in TOOLS[tool]["allow"]:
+            if rule not in rules:
+                rules.append(rule)
+    return rules
 
 
 def build_prompt(slug: str, payload: dict | None, tools: list[str]) -> str:
@@ -64,11 +129,14 @@ def build_prompt(slug: str, payload: dict | None, tools: list[str]) -> str:
 
     if tools:
         parts += ["", "## Tools granted for this run", ""]
-        parts += [f"- `{t}` — {AVAILABLE_TOOLS[t]}" for t in tools]
+        parts += [f"- `{t}` — {TOOLS[t]['how']}" for t in tools]
         parts += [
             "",
-            "Use only these tools. If the directive needs one you were not "
-            "granted, stop and report that instead of improvising.",
+            "These are the only tools you may use, and the only ones you *can* "
+            "use — anything else is blocked by the permission system and this "
+            "run cannot answer an approval prompt. If the directive needs "
+            "something you were not granted, stop and report that instead of "
+            "improvising a workaround.",
         ]
 
     if payload:
@@ -94,6 +162,17 @@ def run(
 ) -> dict:
     """Execute a directive. Returns a result dict; never raises on run failure."""
     tools = validate_tools(tools or [])
+
+    blocked = [reason for t in tools if (reason := unmet_prerequisite(t))]
+    if blocked:
+        return {
+            "ok": False,
+            "slug": slug,
+            "error": "granted tools are not usable yet",
+            "details": blocked,
+            "duration_s": 0.0,
+        }
+
     prompt = build_prompt(slug, payload, tools)
 
     extra = {"ANTHROPIC_MODEL": config.MODEL}
@@ -121,7 +200,17 @@ def run(
         assert_keyless(env, context=f"run_directive({slug})")
 
     # Model comes from ANTHROPIC_MODEL in env, not a --model flag (rule 3).
+    #
+    # The prompt goes FIRST: --allowedTools is variadic and will happily eat a
+    # trailing prompt as one more tool name.
+    #
+    # We pass the grant explicitly rather than relying on .claude/settings.json,
+    # whose permissions.allow is silently ignored until the workspace has been
+    # trusted through an interactive session — a dependency a headless service
+    # should not have.
     cmd = ["claude", "-p", prompt]
+    if allowed := allowlist_for(tools):
+        cmd += ["--allowedTools", ",".join(allowed)]
 
     started = time.time()
     try:
@@ -132,6 +221,8 @@ def run(
             capture_output=True,
             text=True,
             timeout=timeout or config.RUN_TIMEOUT,
+            # A webhook run has no console; never let the child inherit one.
+            stdin=subprocess.DEVNULL,
         )
     except FileNotFoundError:
         return {
@@ -153,6 +244,8 @@ def run(
         "slug": slug,
         "model": config.MODEL,
         "billed_api": allow_billed_api,
+        "granted_tools": tools,
+        "allowed_rules": allowed,
         "returncode": proc.returncode,
         "output": proc.stdout.strip(),
         "stderr": proc.stderr.strip()[-4000:],
@@ -164,7 +257,7 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("slug", help="directive filename without .md, e.g. add_webhook")
     ap.add_argument("--payload", help="JSON object passed to the directive")
-    ap.add_argument("--tools", default="", help=f"comma-separated: {','.join(sorted(AVAILABLE_TOOLS))}")
+    ap.add_argument("--tools", default="", help=f"comma-separated: {','.join(sorted(TOOLS))}")
     ap.add_argument("--timeout", type=int, default=None)
     ap.add_argument("--dry-run", action="store_true", help="print the prompt, spawn nothing")
     ap.add_argument(

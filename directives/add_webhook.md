@@ -11,7 +11,11 @@ deployed endpoint, and a passing test call.
 ## Inputs
 
 - What the webhook should do, in the user's words
-- Which existing tools it needs: `send_email`, `read_sheet`, `update_sheet`
+- Which existing tools it needs:
+  - `drive_search`, `drive_read` — read-only Google Drive through the claude.ai
+    connector. Work today; no credentials file, no sign-in.
+  - `send_email`, `read_sheet`, `update_sheet` — Python tools. Deterministic,
+    but blocked until a Google OAuth `token.json` exists.
 - Who or what will call it (cron, Zapier, another service)
 
 ## Steps
@@ -39,8 +43,12 @@ Add an entry to `execution/webhooks.json` under `webhooks`:
 }
 ```
 
-Grant the fewest tools that can do the job. A tool not listed here is not
-available to that run — `run_directive.py` rejects unknown names outright.
+Grant the fewest tools that can do the job. This is a real boundary, not a
+suggestion: the grant is handed to the CLI as `--allowedTools`, and a
+non-interactive run cannot approve anything outside it. An ungranted script,
+network call, or file write fails. (Trivially-safe read-only commands like
+`whoami` are still auto-approved — treat the grant as a capability limit, not a
+sandbox.)
 
 ### 3. Test locally before deploying
 

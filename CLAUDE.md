@@ -110,7 +110,23 @@ future hosted path.
 
 Every POST requires an `X-Webhook-Token` header matching `WEBHOOK_TOKEN`. If that variable is unset the endpoints return 401 rather than running unauthenticated. The read-only `GET /webhooks` and `GET /health` routes are unauthenticated.
 
-**Available tools for webhooks:** `send_email`, `read_sheet`, `update_sheet`
+**Available tools for webhooks**
+
+Connector-backed (use the claude.ai Google OAuth already on this Mac — no
+`credentials.json`, no sign-in): `drive_search`, `drive_read`. Read-only.
+
+Python-backed (deterministic Layer 3, but need a Google OAuth `token.json`
+minted once from an interactive shell): `send_email`, `read_sheet`,
+`update_sheet`. A run granted one of these refuses up front, with instructions,
+rather than discovering the gap mid-flight.
+
+The grant is enforced, not advisory: `run_directive.py` passes it to the CLI as
+`--allowedTools`, and a non-interactive run cannot approve anything else. Do not
+rely on `.claude/settings.json` for this — its `permissions.allow` is silently
+ignored until the workspace has been trusted interactively, which a headless
+service must not depend on. Note the boundary is not a sandbox: trivially-safe
+read-only commands (`whoami`) are auto-approved. Network egress, file writes,
+and ungranted scripts are blocked.
 
 **All webhook activity streams to Slack in real-time.**
 

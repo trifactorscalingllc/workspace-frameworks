@@ -141,13 +141,25 @@ def install(port: int, skip_probe: bool) -> int:
         plistlib.dump(build_plist(port), fh)
     print(f"\nwrote {PLIST_PATH}")
 
-    # bootout first so a re-install picks up plist changes; failure just means
-    # it was not loaded.
+    # Bootout first so a re-install picks up plist changes; failure just means
+    # it was not loaded. Bootout is ASYNCHRONOUS — bootstrapping while the old
+    # job is still unloading fails with a bare "Input/output error", so wait for
+    # the service to actually disappear from the domain before continuing.
     launchctl("bootout", SERVICE)
+    for _ in range(40):
+        if launchctl("print", SERVICE).returncode != 0:
+            break
+        subprocess.run(["/bin/sleep", "0.25"])
+    else:
+        print(f"warning: {SERVICE} still loaded after bootout; bootstrap may fail", file=sys.stderr)
 
     proc = launchctl("bootstrap", DOMAIN, str(PLIST_PATH))
     if proc.returncode != 0:
-        print(f"launchctl bootstrap failed: {proc.stderr.strip()}", file=sys.stderr)
+        print(
+            f"launchctl bootstrap failed (rc={proc.returncode}): "
+            f"{proc.stderr.strip() or proc.stdout.strip() or 'no message'}",
+            file=sys.stderr,
+        )
         return 1
     launchctl("kickstart", "-k", SERVICE)
     print(f"bootstrapped {SERVICE}")

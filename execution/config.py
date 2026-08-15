@@ -9,6 +9,7 @@ spawn a subprocess.
 from __future__ import annotations
 
 import os
+import sys
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -20,6 +21,11 @@ EXECUTION_DIR = ROOT / "execution"
 DIRECTIVES_DIR = ROOT / "directives"
 TMP_DIR = ROOT / ".tmp"
 ENV_FILE = ROOT / ".env"
+
+# Absolute, because directive runs inherit launchd's minimal PATH, which has no
+# bare `python` at all — telling a run to type `python foo.py` earns exit 127.
+_VENV_PYTHON = ROOT / ".venv" / "bin" / "python"
+PYTHON = str(_VENV_PYTHON if _VENV_PYTHON.exists() else sys.executable)
 
 CREDENTIALS_FILE = ROOT / "credentials.json"
 TOKEN_FILE = ROOT / "token.json"
