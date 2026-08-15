@@ -72,6 +72,15 @@ TOOLS = {
         ],
         "needs": None,
     },
+    "gmail_draft": {
+        "how": (
+            "Use the Gmail connector to create a DRAFT. It is never sent — a "
+            "human opens Gmail and presses send. Say in your report that you "
+            "left a draft, not that you emailed anyone."
+        ),
+        "allow": ["mcp__claude_ai_Gmail__create_draft"],
+        "needs": None,
+    },
 }
 
 

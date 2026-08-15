@@ -112,13 +112,24 @@ Every POST requires an `X-Webhook-Token` header matching `WEBHOOK_TOKEN`. If tha
 
 **Available tools for webhooks**
 
-Connector-backed (use the claude.ai Google OAuth already on this Mac — no
-`credentials.json`, no sign-in): `drive_search`, `drive_read`. Read-only.
+Connector-backed — use the claude.ai Google OAuth already on this Mac, so no
+`credentials.json` and no sign-in:
+
+- `drive_search`, `drive_read` — read-only Google Drive. A Sheet reads back as
+  text/CSV, not cells.
+- `gmail_draft` — leaves a draft in Gmail. It cannot send; sending is a separate
+  connector tool that is deliberately not granted. Unattended runs draft, a
+  human presses send.
 
 Python-backed (deterministic Layer 3, but need a Google OAuth `token.json`
-minted once from an interactive shell): `send_email`, `read_sheet`,
-`update_sheet`. A run granted one of these refuses up front, with instructions,
-rather than discovering the gap mid-flight.
+minted once via `python execution/setup_google_auth.py`): `send_email`,
+`read_sheet`, `update_sheet`. A run granted one of these refuses up front, with
+instructions, rather than discovering the gap mid-flight. Note `send_email`
+really sends — prefer `gmail_draft` in webhook grants, and `--dry-run` while
+iterating.
+
+There is no connector that writes to a Sheet. `update_sheet` is the only path,
+and it needs the OAuth token.
 
 The grant is enforced, not advisory: `run_directive.py` passes it to the CLI as
 `--allowedTools`, and a non-interactive run cannot approve anything else. Do not

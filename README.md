@@ -17,9 +17,23 @@ cp .env.example .env          # then fill in WEBHOOK_TOKEN, SLACK_WEBHOOK_URL, .
 Preflight must pass before you trust the machine. It checks that no billing
 variable can reach a child process and then proves a keyless spawn answers.
 
-For the Sheets and Gmail tools, drop a Google Cloud OAuth client (Desktop app)
-at `credentials.json` and run any tool once from an interactive shell to mint
-`token.json`. Both files are gitignored.
+### Google access
+
+Two paths, and the fast one needs nothing:
+
+- **Connectors (no setup).** `drive_search`, `drive_read`, and `gmail_draft` use
+  the claude.ai Google OAuth already on this Mac. Headless runs inherit it.
+- **Python tools (one-time consent).** `read_sheet`, `update_sheet`, and
+  `send_email` need their own OAuth token — and Sheets *writes* have no
+  connector equivalent, so this is the only path to them:
+
+  ```bash
+  .venv/bin/python execution/setup_google_auth.py --check   # what's missing
+  .venv/bin/python execution/setup_google_auth.py           # run the consent flow
+  ```
+
+  It prints the exact Google Cloud steps if `credentials.json` isn't there yet.
+  Both `credentials.json` and `token.json` are gitignored.
 
 ## Run a directive
 
@@ -60,6 +74,7 @@ execution/      Layer 3 — deterministic scripts.
   config.py         paths, .env loading, billing-var scrub (import this first)
   run_directive.py  the only sanctioned way to invoke a model
   preflight.py      auth + layout audit; --probe spawns a real keyless run
+  setup_google_auth.py  one-time Google consent for the Python tools
   local_webhook.py  the receiver (stdlib only, no web framework)
   install_agent.py  installs it as a launchd LaunchAgent
   webhooks.json     slug -> directive mapping

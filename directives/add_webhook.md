@@ -14,8 +14,11 @@ deployed endpoint, and a passing test call.
 - Which existing tools it needs:
   - `drive_search`, `drive_read` — read-only Google Drive through the claude.ai
     connector. Work today; no credentials file, no sign-in.
+  - `gmail_draft` — leaves a Gmail draft for a human to send. Cannot send.
+    Prefer this over `send_email` for anything unattended.
   - `send_email`, `read_sheet`, `update_sheet` — Python tools. Deterministic,
-    but blocked until a Google OAuth `token.json` exists.
+    but blocked until `python execution/setup_google_auth.py` has been run.
+    `send_email` sends for real, with no human in the loop.
 - Who or what will call it (cron, Zapier, another service)
 
 ## Steps
