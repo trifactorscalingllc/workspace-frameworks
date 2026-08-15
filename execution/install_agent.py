@@ -155,6 +155,22 @@ def install(port: int, skip_probe: bool) -> int:
         )
         return 1
 
+    # Port check FIRST, before anything is written or booted out. A holder that
+    # is us is fine — we are about to replace it. Anything else means we must
+    # change nothing: an earlier version of this checked after the bootout and
+    # left the workspace with a stopped service and a plist naming a port it
+    # could never have.
+    holder = port_holder(port)
+    if holder is not None and holder != LABEL:
+        print(
+            f"\n✗ port {port} is already held by {holder}.\n"
+            f"  This workspace ({LABEL}) needs its own port. Set WEBHOOK_PORT in\n"
+            f"  {config.ENV_FILE} to a free one and re-run, or use --port.\n"
+            f"  Nothing was changed.",
+            file=sys.stderr,
+        )
+        return 1
+
     LOG_DIR.mkdir(parents=True, exist_ok=True)
     PLIST_PATH.parent.mkdir(parents=True, exist_ok=True)
 
@@ -173,16 +189,6 @@ def install(port: int, skip_probe: bool) -> int:
         subprocess.run(["/bin/sleep", "0.25"])
     else:
         print(f"warning: {SERVICE} still loaded after bootout; bootstrap may fail", file=sys.stderr)
-
-    # Our own service is gone by now, so anything still on the port is foreign.
-    if (holder := port_holder(port)) is not None:
-        print(
-            f"\n✗ port {port} is already held by {holder}.\n"
-            f"  This workspace ({LABEL}) needs its own port. Set WEBHOOK_PORT in\n"
-            f"  {config.ENV_FILE} to a free one and re-run, or use --port.",
-            file=sys.stderr,
-        )
-        return 1
 
     proc = launchctl("bootstrap", DOMAIN, str(PLIST_PATH))
     if proc.returncode != 0:
@@ -220,6 +226,9 @@ def uninstall() -> int:
     if PLIST_PATH.exists():
         PLIST_PATH.unlink()
         print(f"removed {PLIST_PATH}")
+    if LOG_DIR.exists():
+        # Kept on purpose — the logs are usually why you are uninstalling.
+        print(f"logs left in place at {LOG_DIR} (delete manually if unwanted)")
     return 0
 
 

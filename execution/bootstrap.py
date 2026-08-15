@@ -131,9 +131,12 @@ def copy_google(donor: Path | None) -> None:
         print("  Google OAuth files already present")
         return
     if donor is None:
-        print("  no donor workspace found. Connector tools (drive_search,")
-        print("  drive_read, gmail_draft) work without this. For Sheets writes")
-        print("  or real sends, run: .venv/bin/python execution/setup_google_auth.py --check")
+        # Deliberately does not claim "no donor found" — find_donor may have
+        # found several and declined to pick, and it already said so.
+        print("  continuing without Google OAuth files. Connector tools")
+        print("  (drive_search, drive_read, gmail_draft) work without them.")
+        print("  For Sheets writes or real sends, run:")
+        print("    .venv/bin/python execution/setup_google_auth.py --check")
         return
 
     for name in GOOGLE_FILES:

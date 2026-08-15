@@ -141,8 +141,26 @@ and ungranted scripts are blocked.
 
 ## Setting up in a new workspace
 
-Follow this in order. Every step below exists because skipping it cost real
-time — the notes in *Traps* are failures that were actually hit, not theory.
+This repo is a template. Duplicate the folder (or clone it), then:
+
+```bash
+python3 execution/bootstrap.py
+```
+
+That creates the venv, installs dependencies, writes a `.env` with a generated
+`WEBHOOK_TOKEN` and a free port, copies Google OAuth files from a sibling
+workspace when there is exactly one to copy from, and runs preflight. Use
+system `python3` — it is stdlib-only precisely because it runs before the venv
+it creates. Then start building; nothing below is required to begin.
+
+Copies are independent by construction: the launchd label and log directory
+derive from the folder name, and each workspace gets its own port. Two
+workspaces can run at once. The installer refuses, without changing anything,
+if another workspace already holds the port.
+
+The rest of this section is what `bootstrap.py` automates, plus the parts it
+cannot do for you. Every step exists because skipping it cost real time — the
+notes in *Traps* are failures actually hit, not theory.
 
 ### 1. Python environment
 

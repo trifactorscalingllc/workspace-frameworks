@@ -8,14 +8,20 @@ this file is just setup.
 ## Setup
 
 ```bash
-python3 -m venv .venv
-.venv/bin/pip install -r requirements.txt
-cp .env.example .env          # then fill in WEBHOOK_TOKEN, SLACK_WEBHOOK_URL, ...
-.venv/bin/python execution/preflight.py --probe
+python3 execution/bootstrap.py
 ```
 
+One command: venv, dependencies, a `.env` with a generated `WEBHOOK_TOKEN` and a
+free port, Google OAuth files copied from a sibling workspace if there is one,
+then preflight. Run it with system `python3` — it is stdlib-only because it runs
+before the venv it creates.
+
 Preflight must pass before you trust the machine. It checks that no billing
-variable can reach a child process and then proves a keyless spawn answers.
+variable can reach a child process, and `--probe` proves a keyless spawn answers.
+
+This repo is a template: duplicate the folder and bootstrap it. Copies are
+independent — the launchd label and log directory come from the folder name, and
+each workspace claims its own port, so several can run side by side.
 
 ### Google access
 
@@ -68,11 +74,12 @@ To run it in the foreground while developing:
 
 ## Layout
 
-```
+```text
 directives/     Layer 1 — SOPs in Markdown. See directives/README.md.
 execution/      Layer 3 — deterministic scripts.
   config.py         paths, .env loading, billing-var scrub (import this first)
   run_directive.py  the only sanctioned way to invoke a model
+  bootstrap.py      one-command setup for a fresh copy (stdlib only)
   preflight.py      auth + layout audit; --probe spawns a real keyless run
   setup_google_auth.py  one-time Google consent for the Python tools
   local_webhook.py  the receiver (stdlib only, no web framework)
