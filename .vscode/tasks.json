@@ -3,9 +3,9 @@
   "tasks": [
     {
       "label": "New Workspace",
-      "detail": "Create a new workspace from this template (prompts for a name)",
+      "detail": "Create a new workspace from this template and open it in a new window",
       "type": "shell",
-      "command": "python3 execution/new_workspace.py \"${input:workspaceName}\"",
+      "command": "python3 execution/new_workspace.py \"${input:workspaceName}\" --open",
       "options": { "cwd": "${workspaceFolder}" },
       "problemMatcher": [],
       "presentation": { "reveal": "always", "panel": "new", "clear": true }

@@ -55,6 +55,34 @@ def warn_if_dirty() -> None:
     )
 
 
+def open_in_editor(dest: Path) -> None:
+    """Open the new workspace in a new VS Code window.
+
+    Inside a VS Code terminal or task, `code` is a shim that talks back to the
+    VS Code client — so over Remote-SSH the window opens on the laptop driving
+    the session, not on this machine, and the folder opens with the correct
+    remote authority. That is why this runs `code` rather than anything local
+    like `open`: it follows the session, not the filesystem.
+
+    `-n` forces a new window instead of reusing the current one.
+    """
+    if not shutil.which("code"):
+        print(
+            "\n  note: no `code` on PATH, so nothing was opened.\n"
+            "        Run this from a VS Code terminal or task and the new\n"
+            "        workspace opens on whichever machine is driving the session.\n"
+            f"        Otherwise open it yourself: {dest}"
+        )
+        return
+
+    proc = subprocess.run(["code", "-n", str(dest)], capture_output=True, text=True)
+    if proc.returncode == 0:
+        print(f"\n  opened {dest.name} in a new VS Code window")
+    else:
+        print(f"\n  could not open VS Code ({proc.stderr.strip() or 'unknown error'}); "
+              f"open it manually: {dest}")
+
+
 def create(name: str, dest_dir: Path, use_google: bool, open_editor: bool) -> int:
     slug = slugify(name)
     if not slug:
@@ -97,9 +125,8 @@ def create(name: str, dest_dir: Path, use_google: bool, open_editor: bool) -> in
         print(f"\n✗ bootstrap failed in {dest}", file=sys.stderr)
         return rc
 
-    if open_editor and shutil.which("code"):
-        subprocess.run(["code", str(dest)])
-        print(f"\n  opened {dest} in VS Code")
+    if open_editor:
+        open_in_editor(dest)
 
     print(f"\n{'=' * 60}\n{slug} is ready at:\n  {dest}\n")
     print("Open it and start describing what you want built.")
