@@ -1,0 +1,11 @@
+{
+  "_comment": "slug -> directive mapping. Each webhook maps to exactly ONE directive with scoped tool access. Tools must be one of: send_email, read_sheet, update_sheet.",
+  "webhooks": {
+    "daily_digest": {
+      "directive": "daily_digest",
+      "description": "Summarize a tracking sheet and email the digest.",
+      "tools": ["read_sheet", "send_email"],
+      "enabled": true
+    }
+  }
+}

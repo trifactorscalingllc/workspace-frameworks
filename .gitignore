@@ -1,0 +1,15 @@
+node_modules/
+.env
+__pycache__/
+.venv/
+
+# Google OAuth — required files, never committed
+credentials.json
+token.json
+
+# Intermediates: always regenerated, never committed.
+# config.py recreates the directory on import, so nothing is tracked here.
+.tmp/
+
+.DS_Store
+*.pyc

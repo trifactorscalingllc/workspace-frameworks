@@ -1,0 +1,12 @@
+# Layer 3 dependencies. Deliberately does NOT include `anthropic` — importing
+# the SDK would bill the paid API instead of the claude.ai subscription.
+python-dotenv>=1.0
+requests>=2.31
+google-api-python-client>=2.120
+google-auth>=2.28
+google-auth-oauthlib>=1.2
+google-auth-httplib2>=0.2
+
+# The webhook receiver (execution/local_webhook.py) runs on the standard library
+# alone — no web framework. Do not add `modal`: a Modal container has no Keychain,
+# so a hosted run must bill the paid API. See CLAUDE.md, "Event-driven runs".

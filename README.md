@@ -1,0 +1,76 @@
+# directive-runner
+
+A 3-layer agent system: Markdown SOPs (`directives/`) describe the work, a model
+routes, and deterministic Python (`execution/`) does it. The architecture and
+the rules that govern it live in [CLAUDE.md](CLAUDE.md) — read that first;
+this file is just setup.
+
+## Setup
+
+```bash
+python3 -m venv .venv
+.venv/bin/pip install -r requirements.txt
+cp .env.example .env          # then fill in WEBHOOK_TOKEN, SLACK_WEBHOOK_URL, ...
+.venv/bin/python execution/preflight.py --probe
+```
+
+Preflight must pass before you trust the machine. It checks that no billing
+variable can reach a child process and then proves a keyless spawn answers.
+
+For the Sheets and Gmail tools, drop a Google Cloud OAuth client (Desktop app)
+at `credentials.json` and run any tool once from an interactive shell to mint
+`token.json`. Both files are gitignored.
+
+## Run a directive
+
+```bash
+.venv/bin/python execution/run_directive.py daily_digest --dry-run
+.venv/bin/python execution/run_directive.py daily_digest \
+    --payload '{"date":"2026-08-14"}' --tools read_sheet,send_email
+```
+
+## Serve webhooks
+
+The receiver runs on this Mac as the logged-in user, under launchd:
+
+```bash
+.venv/bin/python execution/install_agent.py            # probe, install, start
+.venv/bin/python execution/install_agent.py --status
+.venv/bin/python execution/install_agent.py --uninstall
+```
+
+It must be a **LaunchAgent**, never a LaunchDaemon — a daemon has no login
+keychain and every run fails on auth. Same reason there is no cloud option: a
+Linux container would have to bill the paid API. Don't add one.
+
+It binds to loopback. Put a Cloudflare tunnel or a Tailscale **funnel** in front
+of it for public access — funnel is public, serve is tailnet-only.
+
+To run it in the foreground while developing:
+
+```bash
+.venv/bin/python execution/local_webhook.py --port 8787
+```
+
+## Layout
+
+```
+directives/     Layer 1 — SOPs in Markdown. See directives/README.md.
+execution/      Layer 3 — deterministic scripts.
+  config.py         paths, .env loading, billing-var scrub (import this first)
+  run_directive.py  the only sanctioned way to invoke a model
+  preflight.py      auth + layout audit; --probe spawns a real keyless run
+  local_webhook.py  the receiver (stdlib only, no web framework)
+  install_agent.py  installs it as a launchd LaunchAgent
+  webhooks.json     slug -> directive mapping
+  lib/              childenv, google_auth, notify
+  tools/            send_email, read_sheet, update_sheet
+.tmp/           Intermediates. Disposable, always regenerated.
+```
+
+## The one rule that breaks everything
+
+`ANTHROPIC_API_KEY` in the environment silently switches runs from the
+claude.ai subscription to billed API. Never import the Anthropic SDK in
+`execution/`, never hand `os.environ` to a subprocess, and always build child
+environments with `execution/lib/childenv.py:build_child_env()`.
