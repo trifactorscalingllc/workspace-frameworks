@@ -1,24 +1,28 @@
 # Directive: daily_digest
 
-Summarize a tracking sheet and email the digest. This is the worked example —
-copy its shape when writing new directives.
+Summarize a tracking sheet and leave the digest as a Gmail draft. This is the
+worked example — copy its shape when writing new directives.
 
 ## Goal
 
-The recipient opens one email and knows what changed since yesterday, without
-opening the sheet.
+The reader opens one draft, sees what changed since yesterday without opening
+the sheet, and presses send if they want it delivered.
+
+Drafting rather than sending is deliberate: this runs unattended on a webhook,
+and nothing should leave the building without a human glancing at it first.
 
 ## Inputs
 
 From the webhook payload:
 
 - `sheet_id` — the spreadsheet to read. Falls back to `DIGEST_SHEET_ID` in `.env`.
-- `range` — A1 range. Defaults to `Sheet1!A1:Z500`.
-- `to` — recipient. Falls back to `EMAIL_TO` in `.env`.
+- `range` — A1 range. Defaults to `Tracker!A1:Z500`.
+- `to` — draft recipient. Falls back to `EMAIL_TO` in `.env`; if both are empty,
+  address the draft to the account owner. A draft is never delivered, so an
+  imperfect recipient is a nuisance rather than a mistake.
 - `date` — the day being reported on. Defaults to today.
 
-If neither the payload nor `.env` supplies a sheet or a recipient, stop and
-report that. Do not guess a recipient.
+If neither the payload nor `.env` supplies a sheet, stop and report that.
 
 ## Steps
 
@@ -35,20 +39,14 @@ report that. Do not guess a recipient.
    carries a date column, and anything that looks stuck or anomalous. Keep it
    under ~200 words. Lead with the number that matters.
 
-4. Send it:
-
-   ```bash
-   python execution/tools/send_email.py --to <to> \
-     --subject 'Daily digest — <date>' --body-file .tmp/digest_<date>.txt
-   ```
-
-   Write the body to `.tmp/` first so a failed send can be retried without
-   re-summarizing. Use `--dry-run` while iterating.
+4. Create the draft with the `gmail_draft` tool, subject
+   `Daily digest — <date>`. Say in your report that you left a draft; do not
+   claim anyone was emailed.
 
 ## Output
 
-- One email to the recipient.
-- The rendered body left at `.tmp/digest_<date>.txt` for inspection.
+- One Gmail draft, unsent, waiting for a human.
+- Nothing delivered. This directive has no tool that can send.
 
 ## Edge cases
 
@@ -57,8 +55,10 @@ report that. Do not guess a recipient.
 - **Ragged rows**: `read_sheet.py --header` pads short rows, so trailing keys
   come back as `""` rather than going missing. Treat `""` as "not filled in",
   not zero.
-- **Gmail first run**: needs a browser consent once, which cannot happen inside
-  a webhook. Run any tool from an interactive shell first to mint `token.json`.
-- **Duplicate sends**: the run is not idempotent. If the caller retries after a
-  timeout the recipient gets two emails — check whether
-  `.tmp/digest_<date>.sent` exists before sending, and touch it after.
+- **Duplicate drafts**: the run is not idempotent. A caller that retries after a
+  timeout leaves two drafts. Harmless — nothing was sent — but say so in the
+  report rather than letting the reader assume one.
+- **Wanting it to actually send**: swap the grant to `send_email` in
+  `webhooks.json`. Understand what that changes: `send_email` delivers
+  immediately, unattended, with no human in the loop. The draft path exists
+  because that is usually the wrong default for a webhook.

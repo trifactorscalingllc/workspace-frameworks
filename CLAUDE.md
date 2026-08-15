@@ -139,7 +139,122 @@ service must not depend on. Note the boundary is not a sandbox: trivially-safe
 read-only commands (`whoami`) are auto-approved. Network egress, file writes,
 and ungranted scripts are blocked.
 
-**All webhook activity streams to Slack in real-time.**
+## Setting up in a new workspace
+
+Follow this in order. Every step below exists because skipping it cost real
+time — the notes in *Traps* are failures that were actually hit, not theory.
+
+### 1. Python environment
+
+```bash
+python3 -m venv .venv
+.venv/bin/pip install -r requirements.txt
+```
+
+Use the venv for everything. A Homebrew Python is externally managed, so a bare
+`pip install` fails, and — more importantly — a directive run must call the
+interpreter by absolute path (see Traps).
+
+### 2. Prove auth before anything else
+
+```bash
+.venv/bin/python execution/preflight.py --probe
+```
+
+Must be all-pass. `--probe` spawns a real keyless `claude -p`, which is the only
+honest proof that the subscription path works on this machine.
+
+### 3. Google access — pick the path that fits
+
+**Connector path — nothing to set up.** A headless `claude -p` child inherits
+the claude.ai connectors of the logged-in account, so `drive_search`,
+`drive_read` and `gmail_draft` work immediately: no `credentials.json`, no
+consent screen. Prefer this whenever reading is enough.
+
+**Python path — needed only for Sheets *writes*** (no connector can write to a
+Sheet) **and for really sending mail**:
+
+```bash
+.venv/bin/python execution/setup_google_auth.py --check    # says exactly what is missing
+```
+
+It prints the Google Cloud steps when there is no OAuth client. Two things that
+are easy to get wrong:
+
+- Create the client as **Desktop app**.
+- **Enable the APIs in the same project as the client.** Granted scopes and
+  enabled APIs are independent: a project will happily issue a valid Sheets
+  token while the Sheets API is switched off, and the failure only appears at
+  first use. `--check` probes for this and prints the activation URL.
+
+Then consent. If the person consenting is not sitting at this Mac:
+
+```bash
+.venv/bin/python execution/setup_google_auth.py --remote          # prints a link
+.venv/bin/python execution/setup_google_auth.py --finish '<url>'  # redeem it
+```
+
+The link opens anywhere. After approval the browser lands on
+`http://localhost:8765` and **fails to load — that is the expected outcome**.
+Google only accepts `localhost`/`127.0.0.1` as a Desktop-client redirect (never
+a LAN IP or public host), so on any other device that address points at that
+device. The authorization code is in the address bar; `--finish` redeems it.
+The code is single-use and expires in minutes.
+
+### 4. Install the receiver
+
+```bash
+.venv/bin/python execution/install_agent.py           # probes, installs, starts
+.venv/bin/python execution/install_agent.py --status
+```
+
+### Traps
+
+**Headless runs cannot answer a permission prompt.** This is the big one. A
+`claude -p` child that is not given a tool explicitly cannot use it, and cannot
+ask — it simply fails having done nothing. So:
+
+- The grant in `webhooks.json` must reach the CLI as `--allowedTools`.
+  `run_directive.py` does this; it is what makes the grant a real boundary.
+- **Do not rely on `.claude/settings.json`.** Its `permissions.allow` is
+  silently ignored until the workspace has been trusted through an interactive
+  session. A headless service must not depend on that. (Trust it anyway if you
+  want fewer prompts while working interactively.)
+- Put the prompt **before** `--allowedTools`. The flag is variadic and will
+  swallow a trailing prompt as one more tool name.
+- Pass `stdin=subprocess.DEVNULL`. A webhook run has no console, and an
+  inherited stdin makes children behave unpredictably.
+- The boundary is a capability limit, not a sandbox: trivially-safe read-only
+  commands (`whoami`) are auto-approved. Network egress, file writes, and
+  ungranted scripts are blocked.
+
+**launchd's PATH has no bare `python`.** Telling a run to type `python foo.py`
+earns exit 127. Use `config.PYTHON`, which is the venv interpreter's absolute
+path. Same class of bug for `claude` itself: `install_agent.py` writes an
+explicit PATH into the plist, and deliberately does **not** resolve the `claude`
+symlink, because its target is version-stamped and would break on the next
+update.
+
+**`launchctl bootout` is asynchronous.** Bootstrapping immediately after it
+fails with a bare I/O error and leaves nothing running. Wait for the service to
+leave the domain first.
+
+**The receiver caches Python, not data.** Directives and `webhooks.json` are
+re-read per request, so editing them needs no restart. Anything in `execution/`
+is imported once at startup — add a tool to `TOOLS` and the running service
+still calls it unknown, which reads like a typo in `webhooks.json` and is not
+one. Re-run `install_agent.py` after any Python change.
+
+**Verify a token against what it can actually do.** Checking a send-only Gmail
+token with `users().getProfile()` fails, because that needs a *read* scope —
+reporting a healthy token as broken. Use the `tokeninfo` endpoint, which needs
+no scope and reports what was really granted, and confirm a refresh token
+exists or unattended runs die an hour later.
+
+**Drafts, not sends, for anything unattended.** `gmail_draft` cannot send —
+only `create_draft` is granted. `send_email` delivers immediately with no human
+in the loop; keep it out of webhook grants unless that is genuinely wanted, and
+use `--dry-run` while iterating.
 
 ## Summary
 

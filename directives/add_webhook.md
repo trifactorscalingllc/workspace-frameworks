@@ -83,8 +83,15 @@ It must stay a **LaunchAgent**, in the logged-in Aqua session. A system
 LaunchDaemon cannot unlock the login keychain and every run fails on auth.
 
 Already-running instance? Re-run the installer; it boots the old one out first.
-While iterating on a directive you don't need to restart at all — the receiver
-re-reads `webhooks.json` and the directive file on every request.
+
+What needs a restart and what does not:
+
+- **No restart** — editing a directive `.md`, or changing a slug's entry in
+  `webhooks.json`. Both are re-read on every request.
+- **Restart required** — any Python change, including adding a tool to `TOOLS`
+  in `run_directive.py`. The receiver imports that module once at startup, so a
+  new tool name is rejected as unknown until you re-run the installer. The error
+  looks like a typo in `webhooks.json` and is not one.
 
 ### 4b. Expose it
 

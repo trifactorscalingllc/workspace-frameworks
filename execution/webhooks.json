@@ -3,10 +3,10 @@
   "webhooks": {
     "daily_digest": {
       "directive": "daily_digest",
-      "description": "Summarize a tracking sheet and email the digest.",
+      "description": "Summarize the tracking sheet and leave the digest as a Gmail draft (never sends).",
       "tools": [
         "read_sheet",
-        "send_email"
+        "gmail_draft"
       ],
       "enabled": true
     },
