@@ -1,0 +1,26 @@
+{
+  // A new workspace should open ready to work: Explorer on the left (VS Code's
+  // default for a fresh folder) and a clear editor area — no Welcome tab
+  // occupying the middle where the Claude session goes.
+  "workbench.startupEditor": "none",
+
+  // Skip the onboarding checklist; this workspace is already configured.
+  "claudeCode.hideOnboarding": true,
+
+  // The venv is thousands of files. Keep it visible in the Explorer, but out of
+  // search results and the file watcher, which otherwise get slow and noisy.
+  "search.exclude": {
+    "**/.venv": true,
+    "**/__pycache__": true,
+    "**/.tmp": true
+  },
+  "files.watcherExclude": {
+    "**/.venv/**": true,
+    "**/__pycache__/**": true
+  },
+  "files.exclude": {
+    "**/__pycache__": true
+  },
+
+  "python.defaultInterpreterPath": "${workspaceFolder}/.venv/bin/python"
+}

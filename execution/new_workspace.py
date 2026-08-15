@@ -129,7 +129,10 @@ def create(name: str, dest_dir: Path, use_google: bool, open_editor: bool) -> in
         open_in_editor(dest)
 
     print(f"\n{'=' * 60}\n{slug} is ready at:\n  {dest}\n")
-    print("Open it and start describing what you want built.")
+    print("In the new window: Explorer is on the left and the editor area is")
+    print("clear. Press \033[1mCmd+Shift+Esc\033[0m to open Claude as a tab in the middle.")
+    print("VS Code restores that tab on every later open of this workspace, so")
+    print("it is a one-time keystroke.\n")
     print(f"To pull later template improvements:  git -C {dest} pull template main")
     return 0
 
