@@ -118,6 +118,11 @@ def main() -> int:
                     help="open the new workspace in VS Code")
     args = ap.parse_args()
 
+    # Line-buffer our own output. Child processes write to this same stream
+    # unbuffered, so block buffering would interleave their output ahead of
+    # ours and make the transcript read out of order.
+    sys.stdout.reconfigure(line_buffering=True)
+
     return create(args.name, Path(args.dest), not args.no_google, args.open_editor)
 
 

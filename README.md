@@ -19,9 +19,26 @@ before the venv it creates.
 Preflight must pass before you trust the machine. It checks that no billing
 variable can reach a child process, and `--probe` proves a keyless spawn answers.
 
-This repo is a template: duplicate the folder and bootstrap it. Copies are
-independent — the launchd label and log directory come from the folder name, and
-each workspace claims its own port, so several can run side by side.
+## New workspace from this template
+
+Double-click **`New Workspace.command`** in Finder. It asks for a name, creates
+the workspace next to this one, bootstraps it, and opens it in VS Code.
+
+Or from a terminal:
+
+```bash
+python3 execution/new_workspace.py "Acme Onboarding"        # -> ../acme-onboarding
+python3 execution/new_workspace.py client-x --dest ~/projects --open
+```
+
+Copies are independent — the launchd label and log directory come from the
+folder name and each claims its own port, so several run side by side. Google
+OAuth files are copied across, so there is no second consent. The new
+workspace's git remote is named `template`, not `origin`: it cannot accidentally
+push back, and `git pull template main` still brings improvements over.
+
+A clone carries committed state only, so commit anything the new workspace
+should inherit first — it warns you when the template is dirty.
 
 ### Google access
 

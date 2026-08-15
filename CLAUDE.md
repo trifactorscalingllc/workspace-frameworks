@@ -141,7 +141,15 @@ and ungranted scripts are blocked.
 
 ## Setting up in a new workspace
 
-This repo is a template. Duplicate the folder (or clone it), then:
+This repo is a template. To spin up a new workspace from it, double-click
+**`New Workspace.command`** in Finder (it prompts for a name, creates the
+folder, bootstraps it, and opens it in VS Code), or:
+
+```bash
+python3 execution/new_workspace.py "Acme Onboarding"
+```
+
+If you instead copied or cloned the folder by hand, run:
 
 ```bash
 python3 execution/bootstrap.py
