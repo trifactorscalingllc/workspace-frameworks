@@ -16,15 +16,27 @@
   // bootstrap.py drops the marker file; the second rule clears it, so this
   // fires once and then gets out of the way. If the marker is ever left behind,
   // the worst case is the old behaviour of opening a tab each launch.
+  // One rule, two commands in order: close whatever VS Code opened on startup
+  // (the Welcome tab — workbench.startupEditor is application-scoped, so a
+  // workspace setting cannot suppress it), then open Claude in the middle.
+  // closeAllEditors is safe here only because this fires on first launch, when
+  // nothing of yours is open yet.
+  //
+  // The cleanup path is absolute because the extension runs shell commands with
+  // exec() and no cwd, so a relative path resolves somewhere else entirely.
+  // bootstrap.py rewrites __MARKER_PATH__ with this workspace's real path.
   "auto-run-command.rules": [
     {
       "condition": "hasFile: .vscode/.open-claude-on-first-launch",
-      "command": "claude-vscode.editor.open",
-      "message": "Opening Claude Code"
+      "command": [
+        "workbench.action.closeAllEditors",
+        "claude-vscode.editor.open"
+      ],
+      "message": "Priming workspace: opening Claude Code"
     },
     {
       "condition": "hasFile: .vscode/.open-claude-on-first-launch",
-      "command": "rm -f .vscode/.open-claude-on-first-launch",
+      "command": "rm -f __MARKER_PATH__",
       "shellCommand": true,
       "message": "Clearing the first-launch marker"
     }

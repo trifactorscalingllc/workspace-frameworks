@@ -162,6 +162,17 @@ def arm_first_launch() -> None:
         return
     marker = vscode_dir / ".open-claude-on-first-launch"
     marker.write_text("Deleted automatically the first time this workspace opens.\n")
+
+    # The auto-run extension executes shell commands with exec() and no cwd, so
+    # the cleanup rule needs an absolute path or it deletes nothing and the rule
+    # fires on every launch.
+    settings = vscode_dir / "settings.json"
+    if settings.exists():
+        text = settings.read_text()
+        if "__MARKER_PATH__" in text:
+            settings.write_text(text.replace("__MARKER_PATH__", str(marker)))
+            print("  settings.json: cleanup rule pinned to this workspace's path")
+
     print("  armed: Claude opens as a tab the first time this workspace is opened")
 
 
