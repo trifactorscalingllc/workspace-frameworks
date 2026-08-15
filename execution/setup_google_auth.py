@@ -97,15 +97,80 @@ def status() -> tuple[bool, str]:
 
 
 def verify() -> bool:
-    """Prove the token works, rather than trusting that the file exists."""
-    from lib.google_auth import SCOPES, gmail_service
+    """Prove the token works, rather than trusting that the file exists.
 
-    print(f"\n  scopes: {', '.join(SCOPES)}")
+    Checks the token against Google's tokeninfo endpoint, which needs no scope
+    of its own and reports what was actually granted. Deliberately does NOT
+    call gmail.users().getProfile(): that needs a Gmail *read* scope we do not
+    request, so it fails on a perfectly good send-only token.
+    """
+    import urllib.parse
+    import urllib.request
+
+    from lib.google_auth import get_credentials
+
     try:
-        profile = gmail_service().users().getProfile(userId="me").execute()
-        print(f"  authorized as: {profile.get('emailAddress')}")
+        creds = get_credentials()
     except Exception as exc:  # noqa: BLE001 - report, do not crash setup
-        print(f"  warning: token present but a live Gmail call failed: {exc}")
+        print(f"  could not load credentials: {exc}")
+        return False
+
+    query = urllib.parse.urlencode({"access_token": creds.token})
+    try:
+        with urllib.request.urlopen(
+            f"https://oauth2.googleapis.com/tokeninfo?{query}", timeout=20
+        ) as resp:
+            info = json.load(resp)
+    except Exception as exc:  # noqa: BLE001 - report, do not crash setup
+        print(f"  token present but Google rejected it: {exc}")
+        return False
+
+    granted = sorted(info.get("scope", "").split())
+    print("\n  token is live. Google reports these scopes:")
+    for scope in granted:
+        print(f"    - {scope}")
+    if info.get("expires_in"):
+        print(f"  access token expires in {info['expires_in']}s "
+              f"(refresh token stored, so runs renew automatically)")
+    if not creds.refresh_token:
+        print("  warning: no refresh token — unattended runs will stop working "
+              "when the access token expires. Re-run --remote to get one.")
+        return False
+
+    return check_apis_enabled(info.get("aud", ""))
+
+
+def check_apis_enabled(client_id: str) -> bool:
+    """Granted scopes are not the same as an enabled API.
+
+    A project can hand out a perfectly valid Sheets token while the Sheets API
+    itself is switched off, and the failure only shows up mid-run. Probing a
+    deliberately invalid spreadsheet id separates the two cases: 404 means the
+    API is live and our auth reached it, 403 SERVICE_DISABLED means it is off.
+    """
+    from googleapiclient.errors import HttpError
+
+    from lib.google_auth import sheets_service
+
+    project = client_id.split("-", 1)[0] or "your project"
+    try:
+        sheets_service().spreadsheets().get(spreadsheetId="_probe_invalid_id_").execute()
+    except HttpError as exc:
+        if exc.resp.status == 404:
+            print("  Sheets API: enabled and reachable")
+            return True
+        if exc.resp.status == 403 and "SERVICE_DISABLED" in str(exc):
+            print(
+                "\n  ✗ Sheets API is NOT enabled on this Google Cloud project.\n"
+                "    The token is fine — no re-consent needed. Enable it here:\n"
+                f"    https://console.cloud.google.com/apis/library/sheets.googleapis.com?project={project}\n"
+                "    Then wait ~1 min for it to propagate and re-run --check."
+            )
+            return False
+        print(f"  Sheets API check inconclusive: {exc}")
+        return False
+    except Exception as exc:  # noqa: BLE001 - report, do not crash setup
+        print(f"  Sheets API check inconclusive: {exc}")
         return False
     return True
 
