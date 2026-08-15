@@ -24,6 +24,11 @@ variable can reach a child process, and `--probe` proves a keyless spawn answers
 Double-click **`New Workspace.command`** in Finder. It asks for a name, creates
 the workspace next to this one, bootstraps it, and opens it in VS Code.
 
+**In VS Code** (including over Remote-SSH, where Finder on your laptop cannot
+see the mini's files): `Cmd+Shift+P` -> *Tasks: Run Task* -> **New Workspace**.
+It prompts for the name in VS Code itself. The same menu has tasks for
+preflight, the receiver, and Google auth status.
+
 Or from a terminal:
 
 ```bash

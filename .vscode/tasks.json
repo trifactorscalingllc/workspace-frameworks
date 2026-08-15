@@ -1,0 +1,57 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "New Workspace",
+      "detail": "Create a new workspace from this template (prompts for a name)",
+      "type": "shell",
+      "command": "python3 execution/new_workspace.py \"${input:workspaceName}\"",
+      "options": { "cwd": "${workspaceFolder}" },
+      "problemMatcher": [],
+      "presentation": { "reveal": "always", "panel": "new", "clear": true }
+    },
+    {
+      "label": "Preflight (--probe)",
+      "detail": "Audit auth and prove a keyless spawn works",
+      "type": "shell",
+      "command": ".venv/bin/python execution/preflight.py --probe",
+      "options": { "cwd": "${workspaceFolder}" },
+      "problemMatcher": [],
+      "presentation": { "reveal": "always", "panel": "new", "clear": true }
+    },
+    {
+      "label": "Receiver: install / restart",
+      "detail": "Install or restart the LaunchAgent (needed after any Python change)",
+      "type": "shell",
+      "command": ".venv/bin/python execution/install_agent.py",
+      "options": { "cwd": "${workspaceFolder}" },
+      "problemMatcher": [],
+      "presentation": { "reveal": "always", "panel": "new", "clear": true }
+    },
+    {
+      "label": "Receiver: status",
+      "detail": "Is the webhook receiver running, and on which port",
+      "type": "shell",
+      "command": ".venv/bin/python execution/install_agent.py --status",
+      "options": { "cwd": "${workspaceFolder}" },
+      "problemMatcher": [],
+      "presentation": { "reveal": "always", "panel": "new", "clear": true }
+    },
+    {
+      "label": "Google auth: check",
+      "detail": "Token status, granted scopes, and whether the APIs are enabled",
+      "type": "shell",
+      "command": ".venv/bin/python execution/setup_google_auth.py --check",
+      "options": { "cwd": "${workspaceFolder}" },
+      "problemMatcher": [],
+      "presentation": { "reveal": "always", "panel": "new", "clear": true }
+    }
+  ],
+  "inputs": [
+    {
+      "id": "workspaceName",
+      "type": "promptString",
+      "description": "Name for the new workspace (spaces are fine)"
+    }
+  ]
+}
