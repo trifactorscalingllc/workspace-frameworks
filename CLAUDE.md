@@ -108,7 +108,29 @@ access and will fail.
 Keep an `ALLOW_BILLED_API=1` gate, defaulting OFF, as the deliberate opt-in for any
 future hosted path.
 
-Every POST requires an `X-Webhook-Token` header matching `WEBHOOK_TOKEN`. If that variable is unset the endpoints return 401 rather than running unauthenticated. The read-only `GET /webhooks` and `GET /health` routes are unauthenticated.
+**Public URL.** The receiver is published through the existing Tailscale funnel:
+
+    https://trifactors-mac-mini-1.tailff8e29.ts.net/runner
+
+Funnel = public (correct for external callers); serve = tailnet-only. The mount
+strips the prefix, so `/runner/directive?slug=x` reaches the receiver's
+`/directive` route. Routes:
+
+    GET  /runner/health                     unauthenticated, no secrets
+    GET  /runner/webhooks                   token required
+    POST /runner/directive?slug={slug}      token required
+    POST /runner/test-email                 token required
+
+Everything except `/health` requires an `X-Webhook-Token` header matching
+`WEBHOOK_TOKEN`; an unset token means 401 rather than an unauthenticated run.
+`/webhooks` is authenticated because the catalog names every automation and its
+tools. `/health` deliberately reports only ok/model/label — never the workspace
+path — because a tunnel proxies from loopback, so the receiver cannot tell a
+local caller from the internet.
+
+Do not test public reachability from the mini: Tailscale ingress refuses
+hairpin connections from its own node, so even mounts that have worked for
+months fail there. Test from a device off the tailnet.
 
 **Available tools for webhooks**
 

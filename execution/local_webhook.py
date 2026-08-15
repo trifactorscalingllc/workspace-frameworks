@@ -89,15 +89,24 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self) -> None:  # noqa: N802 - BaseHTTPRequestHandler API
         route = urlparse(self.path).path.rstrip("/") or "/"
         if route == "/health":
-            # label/workspace let the installer tell "this is me" from "another
-            # workspace already owns this port".
+            # Deliberately does NOT report the filesystem path: this endpoint is
+            # reachable through the public tunnel, and a tunnel proxies from
+            # loopback so there is no reliable way to tell a local caller from
+            # the internet. `label` is enough for install_agent to recognise its
+            # own service when checking for a port conflict, and leaks nothing.
             self._send(200, {
                 "ok": True,
                 "model": config.MODEL,
                 "label": config.LAUNCHD_LABEL,
-                "workspace": str(config.ROOT),
             })
         elif route == "/webhooks":
+            # The catalog names every automation and the tools it may use. That
+            # is an inventory of the business, so it requires the token now that
+            # this can be reached from outside.
+            ok, why = self._authorized()
+            if not ok:
+                self._send(401, {"ok": False, "error": why})
+                return
             hooks = load_webhooks()
             self._send(200, {"webhooks": [
                 {"slug": slug, **{k: v for k, v in cfg.items() if not k.startswith("_")}}
