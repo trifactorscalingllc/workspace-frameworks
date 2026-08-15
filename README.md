@@ -36,6 +36,17 @@ python3 execution/new_workspace.py "Acme Onboarding"        # -> ../acme-onboard
 python3 execution/new_workspace.py client-x --dest ~/projects --open
 ```
 
+A new workspace opens primed: Explorer on the left, the Welcome tab closed, and
+Claude as a tab in the middle, roughly 5s in. That is a first-launch-only rule
+(`.vscode/settings.json`), because VS Code restores the Claude tab on later
+opens and an unconditional rule would stack a second empty one every time.
+
+**Trust it once.** Both the Claude and auto-run extensions declare
+`untrustedWorkspaces: false`, so nothing primes in an untrusted folder. When VS
+Code asks, tick *trust the parent folder* — every workspace created there is
+then trusted automatically. Trust lives in the VS Code client, so it cannot be
+pre-set from this machine.
+
 Copies are independent — the launchd label and log directory come from the
 folder name and each claims its own port, so several run side by side. Google
 OAuth files are copied across, so there is no second consent. The new

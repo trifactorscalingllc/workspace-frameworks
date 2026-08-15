@@ -166,6 +166,15 @@ derive from the folder name, and each workspace gets its own port. Two
 workspaces can run at once. The installer refuses, without changing anything,
 if another workspace already holds the port.
 
+A new workspace opens primed — Explorer left, Welcome closed, Claude as a tab
+in the middle — via a first-launch-only rule in `.vscode/settings.json`. It has
+to be first-launch-only: `claude-vscode.editor.open` calls `createPanel()`, so
+it always makes a new tab, and VS Code restores the Claude webview on later
+opens. Priming needs the folder **trusted** (both extensions declare
+`untrustedWorkspaces: false`), and trust is stored by the VS Code client, not
+here — so it cannot be pre-set from this machine. Tick *trust the parent
+folder* once and every workspace created there inherits it.
+
 The rest of this section is what `bootstrap.py` automates, plus the parts it
 cannot do for you. Every step exists because skipping it cost real time — the
 notes in *Traps* are failures actually hit, not theory.

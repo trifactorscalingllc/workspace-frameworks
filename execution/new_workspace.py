@@ -129,10 +129,13 @@ def create(name: str, dest_dir: Path, use_google: bool, open_editor: bool) -> in
         open_in_editor(dest)
 
     print(f"\n{'=' * 60}\n{slug} is ready at:\n  {dest}\n")
-    print("In the new window: Explorer is on the left and the editor area is")
-    print("clear. Press \033[1mCmd+Shift+Esc\033[0m to open Claude as a tab in the middle.")
-    print("VS Code restores that tab on every later open of this workspace, so")
-    print("it is a one-time keystroke.\n")
+    print("The new window opens with Explorer on the left, the Welcome tab closed,")
+    print("and Claude as a tab in the middle — about 5s after it appears.\n")
+    print("\033[1mIf VS Code asks whether you trust the folder, say yes.\033[0m Both the Claude")
+    print("and auto-run extensions declare untrustedWorkspaces: false, so nothing")
+    print("primes until you do. Tick \"trust the parent folder\" and every future")
+    print("workspace created here is trusted automatically.")
+    print("If priming does not happen, Claude is still \033[1mCmd+Shift+Esc\033[0m away.\n")
     print(f"To pull later template improvements:  git -C {dest} pull template main")
     return 0
 
