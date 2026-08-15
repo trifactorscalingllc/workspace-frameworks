@@ -77,6 +77,11 @@ TOOLS = {
         ],
         "needs": None,
     },
+    "ig_posts": {
+        "how": f"{config.PYTHON} execution/tools/ig_posts.py [--since <ISO>] [--until <ISO>] [--limit N] [--no-insights]",
+        "allow": [f"Bash({config.PYTHON} execution/tools/ig_posts.py:*)"],
+        "needs": "meta_auth",
+    },
     "gmail_draft": {
         "how": (
             "Use the Gmail connector to create a DRAFT. It is never sent — a "
@@ -91,11 +96,18 @@ TOOLS = {
 
 def unmet_prerequisite(tool: str) -> str | None:
     """Return a human-readable reason a granted tool cannot run yet, or None."""
-    if TOOLS[tool].get("needs") == "google_oauth" and not config.TOKEN_FILE.exists():
+    needs = TOOLS[tool].get("needs")
+    if needs == "google_oauth" and not config.TOKEN_FILE.exists():
         return (
             f"{tool} needs Google OAuth: {config.TOKEN_FILE.name} is missing. Mint it "
             "once from an interactive shell, or use the connector-backed tools "
             "(drive_search, drive_read), which need no credentials file."
+        )
+    if needs == "meta_auth" and not (config.get("META_ACCESS_TOKEN") and config.get("IG_USER_ID")):
+        return (
+            f"{tool} needs Instagram Graph API access. Run "
+            "`python execution/setup_meta_auth.py --check`, which prints the exact "
+            "Meta console steps. Nothing else in the system depends on this."
         )
     return None
 

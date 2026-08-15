@@ -30,6 +30,17 @@
         "gmail_draft"
       ],
       "enabled": true
+    },
+    "content_review": {
+      "directive": "content_review",
+      "description": "Match posted Instagram content to the week's plan, fill Done?, report performance. Drafts email, never sends.",
+      "tools": [
+        "read_sheet",
+        "update_sheet",
+        "ig_posts",
+        "gmail_draft"
+      ],
+      "enabled": true
     }
   }
 }
