@@ -48,6 +48,11 @@ TOOLS = {
         "allow": [f"Bash({config.PYTHON} execution/tools/update_sheet.py:*)"],
         "needs": "google_oauth",
     },
+    "create_sheet": {
+        "how": f"{config.PYTHON} execution/tools/create_sheet.py --title <title> [--tab <name>] [--headers-json <json>] [--if-missing]",
+        "allow": [f"Bash({config.PYTHON} execution/tools/create_sheet.py:*)"],
+        "needs": "google_oauth",
+    },
     # --- Connector tools (the claude.ai Google OAuth already on this Mac) ----
     # These need no credentials.json: the account is already authorized, and a
     # headless child inherits the connectors. Read-only.

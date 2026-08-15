@@ -18,6 +18,18 @@
         "drive_read"
       ],
       "enabled": true
+    },
+    "content_week": {
+      "directive": "content_week",
+      "description": "Review the week's content plan, flag 48h risk, draft next week's sheet. Drafts email, never sends.",
+      "tools": [
+        "read_sheet",
+        "create_sheet",
+        "update_sheet",
+        "drive_search",
+        "gmail_draft"
+      ],
+      "enabled": true
     }
   }
 }
