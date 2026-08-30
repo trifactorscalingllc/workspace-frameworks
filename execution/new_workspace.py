@@ -35,7 +35,10 @@ def slugify(name: str) -> str:
 
 
 def git(*args: str, cwd: Path = TEMPLATE) -> subprocess.CompletedProcess:
-    return subprocess.run(["git", *args], cwd=cwd, capture_output=True, text=True)
+    return subprocess.run(
+        ["git", *args], cwd=cwd, capture_output=True, text=True,
+        encoding="utf-8", errors="replace",
+    )
 
 
 def warn_if_dirty() -> None:
@@ -66,7 +69,11 @@ def open_in_editor(dest: Path) -> None:
 
     `-n` forces a new window instead of reusing the current one.
     """
-    if not shutil.which("code"):
+    # Resolve to the full path rather than passing the bare name: on Windows
+    # `code` is `code.cmd`, and CreateProcess does not apply PATHEXT, so a bare
+    # "code" raises FileNotFoundError even where `which` just found it.
+    code = shutil.which("code")
+    if not code:
         print(
             "\n  note: no `code` on PATH, so nothing was opened.\n"
             "        Run this from a VS Code terminal or task and the new\n"
@@ -75,7 +82,10 @@ def open_in_editor(dest: Path) -> None:
         )
         return
 
-    proc = subprocess.run(["code", "-n", str(dest)], capture_output=True, text=True)
+    proc = subprocess.run(
+        [code, "-n", str(dest)], capture_output=True, text=True,
+        encoding="utf-8", errors="replace",
+    )
     if proc.returncode == 0:
         print(f"\n  opened {dest.name} in a new VS Code window")
     else:
@@ -105,6 +115,7 @@ def create(name: str, dest_dir: Path, use_google: bool, open_editor: bool) -> in
     proc = subprocess.run(
         ["git", "clone", "--quiet", str(TEMPLATE), str(dest)],
         capture_output=True, text=True,
+        encoding="utf-8", errors="replace",
     )
     if proc.returncode != 0:
         print(f"✗ clone failed: {proc.stderr.strip()}", file=sys.stderr)
@@ -114,7 +125,18 @@ def create(name: str, dest_dir: Path, use_google: bool, open_editor: bool) -> in
     # Rename the remote: `origin` pointing at the template invites pushing a
     # project's commits back into it. `template` reads as what it is, and
     # `git pull template main` still brings improvements across.
-    git("remote", "rename", "origin", "template", cwd=dest)
+    #
+    # The return code is checked, not discarded. It was harmless while the
+    # template was a local path — nobody pushes to one — but once the template
+    # is a shared GitHub repo, a silent failure leaves `origin` pointing at it
+    # and this workspace's first `git push` lands in the template.
+    rename = git("remote", "rename", "origin", "template", cwd=dest)
+    if rename.returncode != 0:
+        print(f"✗ could not rename the git remote: {rename.stderr.strip()}\n"
+              f"  Leaving it would let `git push` from {slug} write to the template.\n"
+              f"  Fix it by hand before using this workspace:\n"
+              f"    git -C {dest} remote rename origin template", file=sys.stderr)
+        return 1
     print("  git remote 'origin' renamed to 'template' (no accidental pushes)")
 
     print(f"\n\033[1m==>\033[0m Bootstrapping")

@@ -38,6 +38,16 @@ from lib.childenv import assert_keyless  # noqa: E402
 LABEL = config.LAUNCHD_LABEL
 PLIST_PATH = Path.home() / "Library" / "LaunchAgents" / f"{LABEL}.plist"
 LOG_DIR = Path.home() / "Library" / "Logs" / config.workspace_slug()
+# os.getuid() does not exist on Windows, and this ran at module scope — so
+# merely importing this file there raised AttributeError, which reads as a
+# broken workspace rather than "launchd is macOS-only". There is no Windows
+# port to write: Task Scheduler is a rewrite, not a port. Fail with the reason.
+if not hasattr(os, "getuid"):
+    sys.exit(
+        "install_agent.py is macOS-only — it installs a launchd LaunchAgent.\n"
+        "Run webhook receivers on the mini. Everything else in this workspace\n"
+        "works here without it."
+    )
 DOMAIN = f"gui/{os.getuid()}"
 SERVICE = f"{DOMAIN}/{LABEL}"
 

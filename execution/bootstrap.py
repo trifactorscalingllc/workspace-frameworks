@@ -21,6 +21,8 @@ Options:
 from __future__ import annotations
 
 import argparse
+import json
+import os
 import re
 import secrets
 import shutil
@@ -31,13 +33,22 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 VENV = ROOT / ".venv"
-VENV_PYTHON = VENV / "bin" / "python"
+# venv puts the interpreter in Scripts/ on Windows, bin/ everywhere else.
+# config.py carries the same two lines; this script cannot import it, because it
+# runs before the venv — and therefore before python-dotenv — exists.
+WINDOWS = os.name == "nt"
+VENV_PYTHON = VENV / ("Scripts" if WINDOWS else "bin") / ("python.exe" if WINDOWS else "python")
 ENV_FILE = ROOT / ".env"
 ENV_EXAMPLE = ROOT / ".env.example"
 GOOGLE_FILES = ("credentials.json", "token.json")
 
 # Ports launchd services here tend to land on; start above the common default.
 PORT_RANGE = range(8787, 8850)
+
+
+def venv_hint() -> str:
+    """The venv interpreter as a user would type it, for printed next-steps."""
+    return r".venv\Scripts\python" if WINDOWS else ".venv/bin/python"
 
 
 def step(msg: str) -> None:
@@ -58,6 +69,7 @@ def funnel_reserved_ports() -> set[int]:
         out = subprocess.run(
             ["tailscale", "funnel", "status"],
             capture_output=True, text=True, timeout=15,
+            encoding="utf-8", errors="replace",
         ).stdout
     except (OSError, subprocess.SubprocessError):
         return set()
@@ -162,7 +174,7 @@ def copy_google(donor: Path | None) -> None:
         print("  continuing without Google OAuth files. Connector tools")
         print("  (drive_search, drive_read, gmail_draft) work without them.")
         print("  For Sheets writes or real sends, run:")
-        print("    .venv/bin/python execution/setup_google_auth.py --check")
+        print(f"    {venv_hint()} execution/setup_google_auth.py --check")
         return
 
     for name in GOOGLE_FILES:
@@ -194,9 +206,15 @@ def arm_first_launch() -> None:
     # fires on every launch.
     settings = vscode_dir / "settings.json"
     if settings.exists():
-        text = settings.read_text()
+        text = settings.read_text(encoding="utf-8")
         if "__MARKER_PATH__" in text:
-            settings.write_text(text.replace("__MARKER_PATH__", str(marker)))
+            # The path is spliced INTO a JSON string, so it must be escaped as
+            # one. A Windows path is the case that bites: C:\Users\... makes
+            # \U and \. invalid JSON escapes, VS Code rejects the whole file,
+            # and the workspace silently loses every setting — which reads as
+            # "VS Code just isn't configured" rather than as a bug here.
+            escaped = json.dumps(str(marker))[1:-1]
+            settings.write_text(text.replace("__MARKER_PATH__", escaped), encoding="utf-8")
             print("  settings.json: cleanup rule pinned to this workspace's path")
 
     print("  armed: Claude opens as a tab the first time this workspace is opened")
@@ -235,11 +253,19 @@ def main() -> int:
 
     print("\n" + "=" * 60)
     if rc == 0:
+        label = re.sub(r"[^a-z0-9-]+", "-", ROOT.name.lower()).strip("-")
+        if WINDOWS:
+            # install_agent.py is launchd, so there is no receiver to offer here.
+            # Saying nothing beats printing a command that cannot run.
+            receiver = ("\nWebhooks need the launchd receiver, which is macOS-only —"
+                        "\nrun those on the mini. Everything else works here.")
+        else:
+            receiver = (f"\nStart the receiver whenever you need webhooks:\n"
+                        f"  {venv_hint()} execution/install_agent.py")
         print(f"Ready. This workspace is independent of any other copy:\n"
-              f"  service label : com.trifactor.{re.sub(r'[^a-z0-9-]+', '-', ROOT.name.lower()).strip('-')}\n"
+              f"  service label : com.trifactor.{label}\n"
               f"  port          : {port}\n"
-              f"\nStart the receiver whenever you need webhooks:\n"
-              f"  .venv/bin/python execution/install_agent.py\n"
+              f"{receiver}\n"
               f"\nYou do not need it to start building — just describe what you want.")
     else:
         print("Preflight failed. Fix that before relying on this workspace.")

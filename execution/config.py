@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import os
 import re
+import shutil
 import sys
 from pathlib import Path
 
@@ -25,8 +26,20 @@ ENV_FILE = ROOT / ".env"
 
 # Absolute, because directive runs inherit launchd's minimal PATH, which has no
 # bare `python` at all — telling a run to type `python foo.py` earns exit 127.
-_VENV_PYTHON = ROOT / ".venv" / "bin" / "python"
+# The layout differs by platform: venv puts the interpreter in Scripts/ on
+# Windows and bin/ everywhere else. bootstrap.py repeats this two-line check
+# rather than importing it, because it runs before the venv it creates exists.
+_VENV_BIN = "Scripts" if os.name == "nt" else "bin"
+_VENV_PYTHON = ROOT / ".venv" / _VENV_BIN / ("python.exe" if os.name == "nt" else "python")
 PYTHON = str(_VENV_PYTHON if _VENV_PYTHON.exists() else sys.executable)
+
+# Resolved, for the same reason PYTHON is absolute. On Windows an npm-installed
+# CLI is `claude.cmd`, and CreateProcess appends only `.exe` — it does not read
+# PATHEXT — so a bare "claude" raises FileNotFoundError even though
+# shutil.which() (which does read PATHEXT) just found it. Every spawn site must
+# use this, not the bare name. Falls back to the bare name so a PATH that only
+# resolves at spawn time still works.
+CLAUDE = shutil.which("claude") or "claude"
 
 CREDENTIALS_FILE = ROOT / "credentials.json"
 TOKEN_FILE = ROOT / "token.json"

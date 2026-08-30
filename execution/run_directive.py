@@ -273,7 +273,7 @@ def run(
     # whose permissions.allow is silently ignored until the workspace has been
     # trusted through an interactive session — a dependency a headless service
     # should not have.
-    cmd = ["claude", "-p", prompt]
+    cmd = [config.CLAUDE, "-p", prompt]
     if allowed := allowlist_for(tools):
         cmd += ["--allowedTools", ",".join(allowed)]
 
@@ -285,6 +285,8 @@ def run(
             env=env,
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             timeout=timeout or config.RUN_TIMEOUT,
             # A webhook run has no console; never let the child inherit one.
             stdin=subprocess.DEVNULL,

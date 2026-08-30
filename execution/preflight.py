@@ -165,7 +165,11 @@ def check_no_modal() -> None:
 
 def check_cli_present() -> None:
     try:
-        proc = subprocess.run(["claude", "--version"], capture_output=True, text=True, timeout=30)
+        proc = subprocess.run(
+            [config.CLAUDE, "--version"],
+            capture_output=True, text=True, timeout=30,
+            encoding="utf-8", errors="replace",
+        )
         check("claude CLI on PATH", PASS if proc.returncode == 0 else FAIL, proc.stdout.strip())
     except (FileNotFoundError, subprocess.TimeoutExpired) as exc:
         check("claude CLI on PATH", FAIL, str(exc))
@@ -185,11 +189,13 @@ def probe_keyless_spawn(timeout: int = 180) -> None:
     env = build_child_env({"ANTHROPIC_MODEL": config.MODEL})
     try:
         proc = subprocess.run(
-            ["claude", "-p", "Reply with exactly: PREFLIGHT_OK"],
+            [config.CLAUDE, "-p", "Reply with exactly: PREFLIGHT_OK"],
             cwd=config.ROOT,
             env=env,
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             timeout=timeout,
         )
     except (FileNotFoundError, subprocess.TimeoutExpired) as exc:
