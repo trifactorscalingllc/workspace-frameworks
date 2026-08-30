@@ -169,6 +169,14 @@ def check_findings(root: Path, sources: dict, rep: Report) -> None:
         if conf not in CONFIDENCES:
             rep.add("R3", rel,
                     f"confidence {conf or '(missing)'!r} is not one of {sorted(CONFIDENCES)}")
+
+        # Corroboration. One source can be wrong, quoted out of context, or the
+        # origin every other source is silently repeating — so a single citation
+        # cannot carry high confidence. Downgrade it or find a second source.
+        if conf == "high" and len({c for c in cites if c in sources}) < 2:
+            rep.add("R8", rel,
+                    "high confidence resting on a single source — corroborate it or say "
+                    "medium", severity="warning")
         if not str(meta.get("falsifier", "")).strip():
             rep.add("R3", rel,
                     "no `falsifier` — say what evidence would change your mind, or this is "

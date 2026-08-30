@@ -63,7 +63,9 @@ Files in `findings/`. Each finding carries:
 
 - **statement** — what you conclude.
 - **cites** — the source ids it rests on. Every finding cites at least one.
-- **confidence** — `high` / `medium` / `low`, and say what drives it.
+- **confidence** — `high` / `medium` / `low`, and say what drives it. **`high` needs at least
+  two independent sources.** One source can be wrong, quoted out of context, or the origin every
+  other source is quietly repeating — so check that agreement is independent, not an echo.
 - **falsifier** — what evidence would change your mind, and whether that test is cheap enough to
   actually run. A conclusion with no falsifier is an opinion wearing a lab coat.
 
@@ -83,8 +85,9 @@ Stdlib only, no venv, no dependencies. It **reports and never blocks** — exit 
 because rule 6 below is a heuristic and a false positive must never stop real work.
 
 It checks: sources have id/locator/accessed/valid tier · every `[Sxxx]` citation resolves ·
-findings have a citation, confidence and falsifier · conflicts are classified · sources collected
-but never cited · and Analysis prose that is too similar to the source text it cites.
+findings have a citation, confidence and falsifier · high confidence rests on at least two sources ·
+conflicts are classified · sources collected but never cited · a coverage note exists · and Analysis
+prose that is too similar to the source text it cites.
 
 **What rule 6 can and cannot do.** Measured on real text at threshold 0.45: verbatim restating
 scores 0.82 and is caught; genuine analysis scores 0.19 and passes. But a *loose paraphrase* — a
