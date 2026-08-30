@@ -8,7 +8,7 @@ Apply the IAE research framework to the current workspace.
 Run this exactly:
 
 ```
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$USERPROFILE/.claude/bin/doe.ps1" iae
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$USERPROFILE/.claude/bin/frame.ps1" iae
 ```
 
 Then report, briefly:
@@ -29,7 +29,7 @@ attached, which looks like success and is not.
 
 Do not create any IAE files yourself with Write or Edit. The script is the only
 sanctioned path, so every workspace matches the template and can pull improvements
-later with `doe update`.
+later with `frame update`.
 
 After it succeeds, explain the discipline in one short paragraph — do not paste the
 whole rubric:

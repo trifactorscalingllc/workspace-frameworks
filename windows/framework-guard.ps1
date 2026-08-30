@@ -10,7 +10,8 @@
     It NEVER creates or modifies anything — it only prints a sentence, which
     Claude Code injects as session context. Opening a repo to read it stays clean.
 
-    Silence a folder with a `.no-doe` file. Established codebases are skipped
+    Silence a folder with a `.no-framework` file (`.no-doe` also works, it predates
+    the rename). Established codebases are skipped
     automatically: the target is a bare new folder, not every repo you open.
 #>
 
@@ -32,7 +33,8 @@ try {
 
     # Never nag in a home directory or at a drive root.
     if ($dir.FullName -eq $env:USERPROFILE -or -not $dir.Parent) { exit 0 }
-    if (Test-Path (Join-Path $root '.no-doe')) { exit 0 }
+    # Both names: .no-doe predates the rename and must keep working.
+    if ((Test-Path (Join-Path $root '.no-framework')) -or (Test-Path (Join-Path $root '.no-doe'))) { exit 0 }
 
     # Marker sets, same rule as the mini: every marker in a set must be present,
     # because `directives/` alone is too weak — plenty of repos have one.
@@ -69,7 +71,7 @@ try {
         "conclusion). Before starting work here, offer the one that fits and say why; " +
         "ask rather than guess if it is not obvious. Applying one is additive and " +
         "never restructures what is already there. If the user declines, suggest a " +
-        ".no-doe file to silence this folder for good.")
+        ".no-framework file to silence this folder for good.")
 }
 catch {
     # Fail open, always. Never block a session from starting.

@@ -1,20 +1,26 @@
 <#
 .SYNOPSIS
-    Create or convert a DOE workspace on Windows.
+    Apply a workspace framework, or create a new workspace, on Windows.
 
 .DESCRIPTION
-    The DOE rule is that project folders come from the template, never from a
-    bare mkdir. On the mini that is `newws`; this is the same thing for a laptop
+    The rule is that project folders come from a framework, never from a bare
+    mkdir. On the mini that is `newws`; this is the same thing for a laptop
     running Claude Code locally rather than over Remote-SSH.
 
-    It keeps a local checkout of the template at %USERPROFILE%\.doe-template and
-    drives the template's own Python scripts, so behaviour matches the mini
-    exactly rather than being a second implementation that drifts.
+    Frameworks are peers — DOE structures work, IAE structures research — and
+    none of them owns this command. It keeps a local checkout of the registry at
+    %USERPROFILE%\.frameworks and drives the registry's own Python scripts, so
+    behaviour matches the mini exactly rather than drifting as a second
+    implementation.
+
+    `doe` remains an alias for this command so nothing already installed breaks.
 
 .EXAMPLE
-    doe "Acme Onboarding"    # new workspace in the current directory
-    doe init                 # convert the folder you are already in
-    doe update               # pull the latest template
+    frame                    # apply the default framework here
+    frame iae                # apply the IAE research framework here
+    frame list               # every available framework
+    frame "Acme Onboarding"  # new workspace in the current directory
+    frame update             # refresh the registry and the installed files
 #>
 [CmdletBinding()]
 param(
@@ -24,8 +30,16 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
-$TemplateRepo = 'https://github.com/trifactorscalingllc/doe-template.git'
-$TemplateDir  = Join-Path $env:USERPROFILE '.doe-template'
+$TemplateRepo = 'https://github.com/trifactorscalingllc/workspace-frameworks.git'
+$TemplateDir  = Join-Path $env:USERPROFILE '.frameworks'
+# Reuse a clone made under the old name rather than downloading a second copy.
+# GitHub redirects the old URL, so the existing checkout still pulls fine.
+$LegacyDir = Join-Path $env:USERPROFILE '.doe-template'
+if ((Test-Path (Join-Path $LegacyDir '.git')) -and -not (Test-Path $TemplateDir)) {
+    Move-Item $LegacyDir $TemplateDir
+    git -C $TemplateDir remote set-url origin $TemplateRepo 2>&1 | Out-Null
+    Write-Host "  moved .doe-template -> .frameworks (same clone, new name)" -ForegroundColor Yellow
+}
 
 function Get-Python {
     # The py launcher is the reliable way to pick a version on Windows; bare
@@ -79,14 +93,14 @@ function Sync-Template {
         throw "git is required. Install Git for Windows: https://git-scm.com/download/win`n(Claude Code's Bash tool also needs it, so this is not optional.)"
     }
     if (Test-Path (Join-Path $TemplateDir '.git')) {
-        Write-Host "==> Updating the template" -ForegroundColor Cyan
+        Write-Host "==> Updating the framework registry" -ForegroundColor Cyan
         git -C $TemplateDir pull --quiet --ff-only 2>&1 | Out-Null
         if ($LASTEXITCODE -ne 0) {
             Write-Host "  could not pull; using the copy already on disk" -ForegroundColor Yellow
         }
     }
     else {
-        Write-Host "==> Fetching the DOE template (first run)" -ForegroundColor Cyan
+        Write-Host "==> Fetching the framework registry (first run)" -ForegroundColor Cyan
         # A private repo with no credential helper configured would otherwise
         # block forever on an invisible prompt.
         $env:GIT_TERMINAL_PROMPT = '0'
@@ -110,24 +124,26 @@ if (-not $Name) { $Name = 'init' }
 switch ($Name.ToLower()) {
     { $_ -in 'help', '-h', '--help', '/?' } {
         Write-Host @"
-doe — create or convert a DOE workspace
+frame — apply a workspace framework, or create a new workspace
 
-  doe                     apply DOE to the folder you are in (same as: doe init)
-  doe init                same as above, explicitly
-  doe iae                 apply the IAE research framework here
-  doe list                show every available framework
-  doe "Acme Onboarding"   create a NEW workspace folder here
-  doe update              pull the latest template and refresh the installed files
-  doe help                this message
+  frame                     apply the default framework (doe) to the folder you are in
+  frame doe                 apply DOE — structures work: automations, scripts, steps to run
+  frame iae                 apply IAE — structures research: sources, analysis, findings
+  frame list                every available framework
+  frame "Acme Onboarding"   create a NEW workspace folder here
+  frame update              refresh the registry and the installed files
+  frame help                this message
 
-Template: $TemplateDir
+`doe` is an alias for this command and still works.
+
+Registry: $TemplateDir
 "@
         exit 0
     }
     'update' {
         Sync-Template
         # Refresh the installed copies too. doe.ps1 and the hook are COPIED into
-        # ~/.claude by Install-DOE, so pulling the template alone would leave
+        # ~/.claude by Install-Frameworks, so pulling the registry alone would leave
         # this command running last week's code while claiming to be current.
         $claudeDir = Join-Path $env:USERPROFILE '.claude'
         $binDir    = Join-Path $claudeDir 'bin'
@@ -136,15 +152,15 @@ Template: $TemplateDir
             if (-not (Test-Path $d)) { New-Item -ItemType Directory -Force -Path $d | Out-Null }
         }
         $win = Join-Path $TemplateDir 'windows'
-        Copy-Item (Join-Path $win 'doe.ps1')       (Join-Path $binDir 'doe.ps1')          -Force
-        Copy-Item (Join-Path $win 'doe-guard.ps1') (Join-Path $claudeDir 'doe-guard.ps1') -Force
+        Copy-Item (Join-Path $win 'frame.ps1')          (Join-Path $binDir 'frame.ps1')            -Force
+        Copy-Item (Join-Path $win 'framework-guard.ps1') (Join-Path $claudeDir 'framework-guard.ps1') -Force
         # Glob, not a named list: a new framework ships its own <name>-command.md
         # and must arrive without anyone editing this file.
         foreach ($cmd in (Get-ChildItem (Join-Path $win '*-command.md') -ErrorAction SilentlyContinue)) {
             $slug = $cmd.Name -replace '-command\.md$', ''
             Copy-Item $cmd.FullName (Join-Path $cmdDir "$slug.md") -Force
         }
-        Write-Host "Template and installed files are current." -ForegroundColor Green
+        Write-Host "Registry and installed files are current." -ForegroundColor Green
         exit 0
     }
     'list' {
@@ -153,7 +169,7 @@ Template: $TemplateDir
     }
     'init' {
         Sync-Template
-        Write-Host "==> Applying doe to $((Get-Location).Path)" -ForegroundColor Cyan
+        Write-Host "==> Applying doe to $((Get-Location).Path)" -ForegroundColor Cyan  # default framework
         exit (Invoke-Python @((Join-Path $TemplateDir 'execution\init_here.py'), '--path', (Get-Location).Path))
     }
     default {

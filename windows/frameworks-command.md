@@ -8,7 +8,7 @@ List the frameworks available to apply to a workspace.
 Run this exactly:
 
 ```
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$USERPROFILE/.claude/bin/doe.ps1" list
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$USERPROFILE/.claude/bin/frame.ps1" list
 ```
 
 Report what it prints, then — only if the user's current work makes it obvious —
