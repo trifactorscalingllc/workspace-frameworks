@@ -26,6 +26,7 @@ $ErrorActionPreference = 'Stop'
 
 $ClaudeDir = Join-Path $env:USERPROFILE '.claude'
 $BinDir    = Join-Path $ClaudeDir 'bin'
+$CmdDir    = Join-Path $ClaudeDir 'commands'
 $Here      = Split-Path -Parent $MyInvocation.MyCommand.Path
 
 function Backup([string]$path) {
@@ -38,11 +39,13 @@ function Backup([string]$path) {
 
 Write-Host "==> Installing DOE for this laptop" -ForegroundColor Cyan
 New-Item -ItemType Directory -Force -Path $BinDir | Out-Null
+New-Item -ItemType Directory -Force -Path $CmdDir | Out-Null
 
-# --- 1. the command + the hook ---------------------------------------------
-Copy-Item (Join-Path $Here 'doe.ps1')       (Join-Path $BinDir 'doe.ps1')       -Force
+# --- 1. the command, the hook, and the /doe slash command -------------------
+Copy-Item (Join-Path $Here 'doe.ps1')       (Join-Path $BinDir 'doe.ps1')          -Force
 Copy-Item (Join-Path $Here 'doe-guard.ps1') (Join-Path $ClaudeDir 'doe-guard.ps1') -Force
-Write-Host "  installed doe.ps1 and doe-guard.ps1"
+Copy-Item (Join-Path $Here 'doe-command.md') (Join-Path $CmdDir 'doe.md')          -Force
+Write-Host "  installed doe.ps1, doe-guard.ps1, and the /doe slash command"
 
 # --- 2. the `doe` function in the PowerShell profile ------------------------
 $marker   = '# --- DOE workspace command (managed by Install-DOE.ps1) ---'

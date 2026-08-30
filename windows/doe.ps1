@@ -90,23 +90,45 @@ function Sync-Template {
 
 # ---------------------------------------------------------------------------
 
-if (-not $Name) {
-    Write-Host @"
+# Bare `doe` applies DOE to the folder you are in. That is the common case —
+# you made a folder, opened it, and want it to be a workspace — so it is the
+# default rather than a help screen. Safe as a default because init_here.py is
+# additive and refuses outright on a folder that has its own directives/ or
+# execution/. `doe help` still prints usage.
+if (-not $Name) { $Name = 'init' }
+
+switch ($Name.ToLower()) {
+    { $_ -in 'help', '-h', '--help', '/?' } {
+        Write-Host @"
 doe — create or convert a DOE workspace
 
-  doe "Acme Onboarding"   create a new workspace here
-  doe init                convert the folder you are already in (additive)
-  doe update              pull the latest template
+  doe                     apply DOE to the folder you are in (same as: doe init)
+  doe init                same as above, explicitly
+  doe "Acme Onboarding"   create a NEW workspace folder here
+  doe update              pull the latest template and refresh the installed files
+  doe help                this message
 
 Template: $TemplateDir
 "@
-    exit 0
-}
-
-switch ($Name.ToLower()) {
+        exit 0
+    }
     'update' {
         Sync-Template
-        Write-Host "Template is current." -ForegroundColor Green
+        # Refresh the installed copies too. doe.ps1 and the hook are COPIED into
+        # ~/.claude by Install-DOE, so pulling the template alone would leave
+        # this command running last week's code while claiming to be current.
+        $claudeDir = Join-Path $env:USERPROFILE '.claude'
+        $binDir    = Join-Path $claudeDir 'bin'
+        $cmdDir    = Join-Path $claudeDir 'commands'
+        foreach ($d in @($binDir, $cmdDir)) {
+            if (-not (Test-Path $d)) { New-Item -ItemType Directory -Force -Path $d | Out-Null }
+        }
+        $win = Join-Path $TemplateDir 'windows'
+        Copy-Item (Join-Path $win 'doe.ps1')       (Join-Path $binDir 'doe.ps1')          -Force
+        Copy-Item (Join-Path $win 'doe-guard.ps1') (Join-Path $claudeDir 'doe-guard.ps1') -Force
+        $slash = Join-Path $win 'doe-command.md'
+        if (Test-Path $slash) { Copy-Item $slash (Join-Path $cmdDir 'doe.md') -Force }
+        Write-Host "Template and installed files are current." -ForegroundColor Green
         exit 0
     }
     'init' {
