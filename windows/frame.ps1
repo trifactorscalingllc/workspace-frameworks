@@ -152,8 +152,29 @@ Registry: $TemplateDir
             if (-not (Test-Path $d)) { New-Item -ItemType Directory -Force -Path $d | Out-Null }
         }
         $win = Join-Path $TemplateDir 'windows'
-        Copy-Item (Join-Path $win 'frame.ps1')          (Join-Path $binDir 'frame.ps1')            -Force
-        Copy-Item (Join-Path $win 'framework-guard.ps1') (Join-Path $claudeDir 'framework-guard.ps1') -Force
+
+        # Hand off to the registry's own installer when it is there, rather than
+        # re-implementing the copy here. It is the single source of truth for
+        # what gets installed where, and it survives files being renamed.
+        $installer = Join-Path $win 'Install-Frameworks.ps1'
+        if (Test-Path $installer) {
+            # Not $LASTEXITCODE: that reflects the last NATIVE command, which
+            # here is the git pull inside Sync-Template, not the installer. The
+            # installer runs with ErrorActionPreference Stop, so a failure
+            # throws rather than returning a code.
+            & $installer
+            exit 0
+        }
+
+        # Fallback for a registry older than that installer. Copy by glob and
+        # tolerate a missing file: this block is what broke across the
+        # doe.ps1 -> frame.ps1 rename, because an old copy of this script went
+        # looking for its own former filename in a registry that had moved on.
+        # A self-updater must never hard-code the names of the files it updates.
+        foreach ($ps1 in (Get-ChildItem (Join-Path $win '*.ps1') -ErrorAction SilentlyContinue)) {
+            $dest = if ($ps1.Name -like '*guard*') { $claudeDir } else { $binDir }
+            Copy-Item $ps1.FullName (Join-Path $dest $ps1.Name) -Force -ErrorAction SilentlyContinue
+        }
         # Glob, not a named list: a new framework ships its own <name>-command.md
         # and must arrive without anyone editing this file.
         foreach ($cmd in (Get-ChildItem (Join-Path $win '*-command.md') -ErrorAction SilentlyContinue)) {
