@@ -52,16 +52,28 @@ function Get-Python {
         @{ Exe = 'python';  Pre = @() },
         @{ Exe = 'python3'; Pre = @() }
     )
+    # Windows PowerShell 5.1 turns ANY native command's stderr into a throwing
+    # NativeCommandError while ErrorActionPreference is Stop, and a version
+    # probe legitimately writes there. Local to this function only.
+    $ErrorActionPreference = 'Continue'
     foreach ($c in $candidates) {
         if (-not (Get-Command $c.Exe -ErrorAction SilentlyContinue)) { continue }
-        $probe = $c.Pre + @('-c', 'import sys; print("%d.%d" % sys.version_info[:2])')
-        $ver = & $c.Exe @probe 2>$null
-        if ($LASTEXITCODE -ne 0 -or -not $ver) { continue }
-        $parts = "$ver".Trim().Split('.')
-        # The template uses `X | None` unions, so anything below 3.10 dies at
-        # import with a confusing TypeError rather than a version message.
-        if ([int]$parts[0] -eq 3 -and [int]$parts[1] -ge 10) { return $c }
-        Write-Host "  found Python $ver, but DOE needs 3.10+" -ForegroundColor Yellow
+        # `--version`, not `-c "..."`: PowerShell strips embedded double quotes
+        # when building a native command line, so a -c snippet containing them
+        # reaches Python mangled and dies with a SyntaxError.
+        # Assignment-from-try is not dependable on Windows PowerShell 5.1, and
+        # [regex]::Match beats Select-String's MatchInfo indirection here.
+        $raw = $null
+        try { $raw = & $c.Exe @($c.Pre + @('--version')) 2>&1 } catch { }
+        if (-not $raw) { continue }
+        $m = [regex]::Match(($raw | Out-String), '(\d+)\.(\d+)')
+        if (-not $m.Success) { continue }
+        $major = [int]$m.Groups[1].Value
+        $minor = [int]$m.Groups[2].Value
+        # The registry's code uses `X | None` unions, so anything below 3.10
+        # dies at import with a confusing TypeError rather than a clear message.
+        if ($major -eq 3 -and $minor -ge 10) { return $c }
+        Write-Host "  found Python $major.$minor, but frameworks need 3.10+" -ForegroundColor Yellow
     }
     throw "No Python 3.10+ found. Install it from https://python.org (tick 'Add python.exe to PATH'), then reopen this terminal."
 }
@@ -70,6 +82,9 @@ function Invoke-Python {
     param([string[]]$Arguments)
     $py = Get-Python
     $full = $py.Pre + $Arguments
+    # init_here.py prints refusals to stderr, and under PS 5.1 with
+    # ErrorActionPreference Stop that would throw instead of printing.
+    $ErrorActionPreference = 'Continue'
     # Out-Host, not bare invocation: a native command's stdout otherwise joins
     # this function's output stream, so the caller would receive the script's
     # entire console output followed by the exit code, and `exit` would be
@@ -85,10 +100,13 @@ function Read-Python {
     param([string[]]$Arguments)
     $py = Get-Python
     $full = $py.Pre + $Arguments
+    $ErrorActionPreference = 'Continue'
     return (& $py.Exe @full 2>$null | Out-String)
 }
 
 function Sync-Template {
+    # git writes progress to stderr; same PS 5.1 hazard as above.
+    $ErrorActionPreference = 'Continue'
     if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
         throw "git is required. Install Git for Windows: https://git-scm.com/download/win`n(Claude Code's Bash tool also needs it, so this is not optional.)"
     }
