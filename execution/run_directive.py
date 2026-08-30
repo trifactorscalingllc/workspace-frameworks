@@ -53,6 +53,45 @@ TOOLS = {
         "allow": [f"Bash({config.PYTHON} execution/tools/create_sheet.py:*)"],
         "needs": "google_oauth",
     },
+    # --- Topic ingest (local disk only; no Google auth, no network) ----------
+    # Ordered the way a run must use them: back up, ask permission, then look.
+    "snapshot_topic": {
+        "how": (
+            f"{config.PYTHON} execution/tools/snapshot_topic.py --path <dir> "
+            "| --verify <snapshot> | --list. APFS clone plus a hash manifest. "
+            "Always --verify after taking one; an unverified backup is not a backup."
+        ),
+        "allow": [f"Bash({config.PYTHON} execution/tools/snapshot_topic.py:*)"],
+        "needs": None,
+    },
+    "preflight_topic": {
+        "how": (
+            f"{config.PYTHON} execution/tools/preflight_topic.py --path <dir> "
+            "[--json]. Decides whether a folder is safe to convert; exit 1 means "
+            "blocked. Never work around a block — report it and stop."
+        ),
+        "allow": [f"Bash({config.PYTHON} execution/tools/preflight_topic.py:*)"],
+        "needs": None,
+    },
+    "scan_topic": {
+        "how": (
+            f"{config.PYTHON} execution/tools/scan_topic.py --path <dir> "
+            "[--max-files N]. Read-only, credential-scrubbed inventory written to "
+            ".tmp/ingest/<topic>/inventory.json."
+        ),
+        "allow": [f"Bash({config.PYTHON} execution/tools/scan_topic.py:*)"],
+        "needs": None,
+    },
+    "stage_proposal": {
+        "how": (
+            f"{config.PYTHON} execution/tools/stage_proposal.py --topic <name> "
+            "--part proposal|directive <<'EOF' ... EOF, or --part webhook --slug "
+            "<slug> --description <d> --tools <a,b>. The only way an ingest run "
+            "can write, and it can only write into .tmp/ingest/<topic>/."
+        ),
+        "allow": [f"Bash({config.PYTHON} execution/tools/stage_proposal.py:*)"],
+        "needs": None,
+    },
     # --- Connector tools (the claude.ai Google OAuth already on this Mac) ----
     # These need no credentials.json: the account is already authorized, and a
     # headless child inherits the connectors. Read-only.

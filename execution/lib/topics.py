@@ -73,7 +73,25 @@ _REDACTIONS = (
     re.compile(r"[A-Za-z0-9_-]{24}\.[A-Za-z0-9_-]{6}\.[A-Za-z0-9_-]{27,}"),  # discord
     re.compile(r"-----BEGIN[^-]*PRIVATE KEY-----.*?-----END[^-]*PRIVATE KEY-----",
                re.DOTALL),
+    # Prefixed UUID tokens: GHL private integration keys look like
+    # `pit-50e016d7-512b-...`, and the same shape is used by several vendors.
+    re.compile(r"\b[a-z]{2,6}-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-"
+               r"[0-9a-f]{4}-[0-9a-f]{12}\b"),
+    # Snowflake-style IDs (Discord guild/channel). 17+ digits, well clear of a
+    # 13-digit millisecond timestamp.
+    re.compile(r"\b\d{17,22}\b"),
 )
+
+# Bare high-entropy tokens with no assignment around them. This is the pattern
+# that matters most in practice: the audit found seven live GHL credentials
+# written into `brain/stack.md` as documentation prose, where no key-name rule
+# and no filename skiplist could ever have reached them.
+#
+# The test is three character classes in a 20+ char run, which real keys satisfy
+# and English words, file paths, and git SHAs (hex — no uppercase) do not.
+_HIGH_ENTROPY = re.compile(r"\b(?=[A-Za-z0-9_-]{20,}\b)(?=[A-Za-z0-9_-]*[a-z])"
+                           r"(?=[A-Za-z0-9_-]*[A-Z])(?=[A-Za-z0-9_-]*\d)"
+                           r"[A-Za-z0-9_-]{20,}\b")
 # `FOO_API_KEY = "…"` in any syntax. Keeps the name, drops the value — the name
 # is a real finding (it tells you which grant the topic needs), the value is not.
 _ASSIGNMENT = re.compile(
@@ -83,13 +101,44 @@ _ASSIGNMENT = re.compile(
 REDACTED = "«redacted»"
 
 
+# Values that are demonstrably *not* literal secrets: a URL, or a reference to a
+# variable holding one. Skipping these keeps the inventory informative — knowing
+# a topic posts to `oauth2.googleapis.com/token`, or that it reads
+# `env.KEENAN_DRIVE_CLIENT_SECRET`, is exactly the sort of fact the proposal
+# needs, and neither exposes anything.
+_NOT_A_LITERAL = re.compile(
+    r"""^(?:https?://|/|\./|\.\./|\$|\{|`)          # URL, path, or interpolation
+      | ^(?:process\.env|env|os\.environ|getenv|String|Number|Boolean|config)\b
+      | ^(?:None|null|true|false|undefined|xxx+|your[_-]|<|change[_-]?me|placeholder)
+    """,
+    re.IGNORECASE | re.VERBOSE,
+)
+
+
+def _redact_assignment(match: re.Match, counter: list[int]) -> str:
+    name, sep, quote, value = match.groups()
+    if _NOT_A_LITERAL.search(value):
+        return match.group(0)
+    counter[0] += 1
+    return f"{name}{sep}{quote}{REDACTED}{quote}"
+
+
 def redact(text: str) -> tuple[str, int]:
-    """Scrub credential-shaped strings. Returns the text and a hit count."""
+    """Scrub credential-shaped strings. Returns the text and a hit count.
+
+    Biased hard toward over-redaction. The inventory exists so a model can
+    understand what a folder *does*; it never needs a live key to do that, so a
+    false positive costs nothing and a false negative writes a working
+    credential into ``.tmp/``.
+    """
     hits = 0
     for pattern in _REDACTIONS:
         text, n = pattern.subn(REDACTED, text)
         hits += n
-    text, n = _ASSIGNMENT.subn(rf"\1\2\3{REDACTED}\3", text)
+    counter = [0]
+    text = _ASSIGNMENT.sub(lambda m: _redact_assignment(m, counter), text)
+    hits += counter[0]
+    text, n = _HIGH_ENTROPY.subn(REDACTED, text)
     return text, hits + n
 
 
@@ -219,23 +268,113 @@ def _is_within(path: Path, root: Path) -> bool:
 
 
 def launchd_refs(root: Path) -> list[dict]:
-    """LaunchAgent plists naming this path.
+    """LaunchAgent plists naming this path, active and paused alike.
 
-    ~95 plists reference these folders and ~50 point into ``tom``. Each one is a
-    thing that must be reworked at cutover, so they are reported by label.
+    ~95 plists reference these folders and ~50 point into ``tom``. Each one is
+    cutover work, so they are reported by label.
+
+    Paused agents are included deliberately. ``academy-assistant`` has two
+    ``com.tfs.*.plist.paused`` files: nothing is loaded today, so a glob for
+    ``*.plist`` sees an unwired folder — but the wiring is one rename away from
+    live, pointed at a folder that may since have moved. Latent wiring is still
+    wiring; it is reported as a warning rather than silently passing.
     """
     needle = str(root.resolve())
     refs: list[dict] = []
     if not LAUNCH_AGENTS.is_dir():
         return refs
-    for plist in sorted(LAUNCH_AGENTS.glob("*.plist")):
+    for plist in sorted(LAUNCH_AGENTS.glob("*.plist*")):
         try:
             text = plist.read_text(errors="replace")
         except OSError:
             continue
         if re.search(rf"{re.escape(needle)}(?![A-Za-z0-9._-])", text):
-            refs.append({"label": plist.stem, "plist": str(plist)})
+            paused = plist.suffix != ".plist"
+            label = plist.name.split(".plist")[0]
+            refs.append({"label": label, "plist": str(plist), "paused": paused})
     return refs
+
+
+_CODE_SUFFIXES = frozenset({
+    ".py", ".js", ".mjs", ".cjs", ".ts", ".tsx", ".jsx", ".sh", ".bash",
+    ".zsh", ".rb", ".go", ".plist",
+})
+_COMMENT_LINE = re.compile(r"(//|#|\*|/\*|--|<!--)")
+
+
+def absolute_path_coupling(root: Path, max_files: int = 1500) -> dict:
+    """Other topic folders this one names by absolute path.
+
+    The symlink checks miss this entirely, and the miss is not theoretical:
+    ``academy-assistant`` passes ``not_self_contained`` with a clean bill, yet
+    imports seven modules from ``/Users/tfs/shared/`` and writes into
+    ``/Users/tfs/projects/Dionet/`` — all by hard-coded absolute path, zero
+    symlinks involved.
+
+    A folder coupled this way is no more liftable than one that symlinks, so a
+    gate that only looks at symlinks reports a dangerous ``clear``.
+    """
+    root = root.resolve()
+    pattern = re.compile(r"/Users/tfs/([A-Za-z0-9._-]+)")
+    # Machine-wide state and this workspace's own paths are not couplings.
+    ignore = {root.name, ".claude", ".local", ".config", ".cache", "Library",
+              "Applications", ".Trash", ".topic-snapshots", ".venv"}
+    hits: dict[str, dict] = {}
+    scanned = 0
+
+    stack = [root]
+    while stack and scanned < max_files:
+        current = stack.pop()
+        try:
+            entries = list(os.scandir(current))
+        except OSError:
+            continue
+        for entry in entries:
+            path = Path(entry.path)
+            if entry.is_symlink():
+                continue
+            if entry.is_dir(follow_symlinks=False):
+                if entry.name not in PRUNE_DIRS and not (path / "pyvenv.cfg").exists():
+                    stack.append(path)
+                continue
+            if path.suffix.lower() not in TEXT_SUFFIXES:
+                continue
+            if scanned >= max_files:
+                break
+            scanned += 1
+            try:
+                text = path.read_text(errors="replace")
+            except OSError:
+                continue
+
+            is_code = path.suffix.lower() in _CODE_SUFFIXES
+            rel = str(path.relative_to(root))
+            for line in text.splitlines():
+                stripped = line.lstrip()
+                # A path in a comment or a README is a mention, not a dependency.
+                # Only an executable reference actually breaks when the folder
+                # moves, and conflating the two blocks every folder on prose.
+                executable = is_code and not _COMMENT_LINE.match(stripped)
+                for name in pattern.findall(line):
+                    if name in ignore:
+                        continue
+                    record = hits.setdefault(name, {
+                        "folder": name, "code_refs": 0, "mentions": 0, "files": [],
+                    })
+                    if executable:
+                        record["code_refs"] += 1
+                        if rel not in record["files"] and len(record["files"]) < 6:
+                            record["files"].append(rel)
+                    else:
+                        record["mentions"] += 1
+
+    ranked = sorted(hits.values(), key=lambda h: (-h["code_refs"], -h["mentions"]))
+    return {
+        "scanned_files": scanned,
+        "truncated": scanned >= max_files,
+        "coupled_to": [h for h in ranked if h["code_refs"]],
+        "mentioned_only": [h["folder"] for h in ranked if not h["code_refs"]],
+    }
 
 
 def _own_pid_chain() -> set[str]:

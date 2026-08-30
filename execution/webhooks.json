@@ -19,6 +19,17 @@
       ],
       "enabled": true
     },
+    "ingest_topic": {
+      "directive": "ingest_topic",
+      "description": "Inventory one topic folder and propose a directive/webhook split. Propose-only: writes nothing outside .tmp/ and never modifies the source folder.",
+      "tools": [
+        "snapshot_topic",
+        "preflight_topic",
+        "scan_topic",
+        "stage_proposal"
+      ],
+      "enabled": true
+    },
     "content_week": {
       "directive": "content_week",
       "description": "Review the week's content plan, flag 48h risk, draft next week's sheet. Drafts email, never sends.",

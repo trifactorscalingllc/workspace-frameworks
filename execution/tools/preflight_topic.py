@@ -92,13 +92,48 @@ def check(root: Path) -> dict:
             "Stop them first (launchctl bootout gui/$UID/<label>), then re-run.",
             [f"pid {p['pid']}: {p['command'][:120]}" for p in procs[:15]])
 
+    # --- Does it name other folders by absolute path? ---------------------
+    coupling = topics.absolute_path_coupling(root)
+    if coupling["coupled_to"]:
+        worst = coupling["coupled_to"][0]
+        add("block", "absolute_path_coupling",
+            f"Hard-codes absolute paths into {len(coupling['coupled_to'])} other "
+            f"folder(s) — most often {worst['folder']}. No symlink is involved, so "
+            "the symlink checks pass while the folder is still not liftable.",
+            "Replace the absolute paths with config, or convert the folders "
+            "together. Moving this one alone breaks those references.",
+            [f"{c['folder']}: {c['code_refs']} executable ref(s) in "
+             f"{', '.join(c['files'][:3])}"
+             for c in coupling["coupled_to"][:12]])
+    if coupling["mentioned_only"]:
+        add("warn", "documented_neighbours",
+            f"{len(coupling['mentioned_only'])} other folder(s) appear only in "
+            "prose or comments, not executable code.",
+            "No runtime dependency, but the docs go stale if those folders move.",
+            coupling["mentioned_only"][:12])
+    if coupling["truncated"]:
+        add("warn", "coupling_scan_truncated",
+            f"Only the first {coupling['scanned_files']} text files were checked "
+            "for absolute-path coupling.",
+            "Re-run with a larger cap before trusting a clear result here.")
+
     # --- Is it wired into launchd? ----------------------------------------
     refs = topics.launchd_refs(root)
-    if refs:
+    active = [r for r in refs if not r["paused"]]
+    paused = [r for r in refs if r["paused"]]
+    if active:
         add("warn", "launchd_wiring",
-            f"{len(refs)} LaunchAgent(s) reference this path. Each is cutover work.",
+            f"{len(active)} active LaunchAgent(s) reference this path. Each is "
+            "cutover work.",
             "Plan to rewrite or bootout every label listed before retiring the folder.",
-            [r["label"] for r in refs[:30]])
+            [r["label"] for r in active[:30]])
+    if paused:
+        add("warn", "launchd_paused",
+            f"{len(paused)} paused LaunchAgent(s) reference this path — latent "
+            "wiring, one rename away from live.",
+            "Delete them, or repoint them, before the folder moves. Do not treat "
+            "'nothing loaded' as 'nothing wired'.",
+            [r["label"] for r in paused[:30]])
 
     # --- Is it backed up off this disk? -----------------------------------
     git = topics.git_info(root)

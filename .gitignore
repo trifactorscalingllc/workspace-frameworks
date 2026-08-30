@@ -1,5 +1,9 @@
 node_modules/
 .env
+# Timestamped copies bootstrap/edits leave behind. `.env` above does NOT match
+# these, and they hold a live WEBHOOK_TOKEN — an unignored one would publish a
+# secret the first time this template is pushed to a remote.
+.env.bak*
 __pycache__/
 .venv/
 

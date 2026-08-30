@@ -161,6 +161,54 @@ service must not depend on. Note the boundary is not a sandbox: trivially-safe
 read-only commands (`whoami`) are auto-approved. Network egress, file writes,
 and ungranted scripts are blocked.
 
+## Converting an old topic folder into this shape
+
+The folders at `/Users/tfs/` — `arnie`, `tom`, `keenan-bot`, `pb-assistant`,
+`projects/` — predate this template. `ingest_topic` inventories one and
+**proposes** how it could become a directive plus a webhook. It is propose-only:
+it writes to `.tmp/ingest/<topic>/` and nowhere else.
+
+**The rule that governs everything here: never restructure a source folder.**
+Conversion is additive. The new workspace is built beside the old folder, which
+stays intact and running until a human retires it. This is not caution for its
+own sake — an audit on 2026-08-14 found ~95 LaunchAgents and 33 live processes
+rooted in those folders, and this Mac has **no Time Machine and no APFS
+snapshots**. The only pre-existing backup is `~/Library/Scripts/fleet-backup.sh`,
+covering seven repos with GitHub remotes.
+
+The pipeline is three tools, in this order, and skipping one defeats the point:
+
+1. `snapshot_topic.py --path <dir>` then `--verify <snapshot>`. An APFS
+   copy-on-write clone into `~/.topic-snapshots/` (0700, because a faithful
+   backup contains the folder's `.env`). 3,615 files in 1.2s. **An unverified
+   backup is not a backup** — `--verify` re-hashes against the manifest.
+2. `preflight_topic.py --path <dir>`. The refusal gate. Exit 1 means blocked;
+   report it and stop rather than working around it. It blocks on: other folders
+   symlinking *into* this one, this folder borrowing config from elsewhere, live
+   processes, container folders, and no off-disk backup.
+3. `scan_topic.py --path <dir>`. Read-only, credential-scrubbed inventory.
+
+`apply_ingest.py` promotes a proposal into `directives/` + `webhooks.json`, always
+`"enabled": false`, refusing to overwrite a directive or rebind a slug. It is
+deliberately **not** in any webhook's tool grant: promotion is a human action.
+
+Three things the audit established, which the tools now encode:
+
+- **`tom` is a dependency hub, not a topic.** 35 symlinks point into it; six
+  sibling bots take `node_modules` from `tom/bot/`, and every `tom-agents/*`
+  borrows `node_modules`, `output` *and* `.env` from it. Restructuring `tom`
+  breaks sixteen other folders. It is not convertible today at any level of care.
+- **Credentials live in prose, not just in `.env`.** Seven live GHL keys were
+  found written into a `brain/stack.md` as documentation. So redaction is by
+  *shape* (high-entropy runs, prefixed-UUID tokens) as well as by filename, and
+  is deliberately biased toward over-redaction — a scrubbed inventory is still
+  perfectly usable for deciding what a folder does.
+- **Claude's own state is keyed to the absolute path.** 47 directories under
+  `~/.claude/projects/` and 26 `.claude.json` entries. If a folder is ever
+  retired, leave a stub `CLAUDE.md` pointing at the replacement: a stale one is
+  worse than a missing one, because it instructs the next agent to work against a
+  layout that no longer exists.
+
 ## Setting up in a new workspace
 
 This repo is a template. To spin up a new workspace from it, double-click
