@@ -3,7 +3,12 @@
   "title": "IAE — Identification / Analysis / Evaluation",
   "description": "Research. Structures how sources are read and judged: every claim traceable to a locator, conflicts made explicit, conclusions carrying confidence and a falsifier.",
   "use_when": "Reading and reasoning over sources — evaluating a technology, a market, a claim, a body of literature. Not for building or automating; use doe for that.",
-  "markers": ["sources", "findings", "check_iae.py"],
+  "markers": [
+    "sources",
+    "findings",
+    "check_iae.py"
+  ],
   "bootstrap": false,
-  "check": "check_iae.py"
+  "check": "check_iae.py",
+  "blurb": "structures thinking (reading sources, reaching a defensible conclusion)"
 }

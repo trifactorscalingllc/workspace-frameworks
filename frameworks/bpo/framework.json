@@ -1,0 +1,14 @@
+{
+  "name": "bpo",
+  "title": "BPO — Baseline / Proof / Outcome",
+  "description": "Client delivery. Every claimed outcome traces to a dated baseline and a dated post-measure of the same metric, with confounders named.",
+  "use_when": "Doing work for a client or a goal where you will later report what changed. Anything that ends in a report, a result, or a renewal conversation.",
+  "markers": [
+    "baseline",
+    "proof",
+    "check_bpo.py"
+  ],
+  "bootstrap": false,
+  "check": "check_bpo.py",
+  "blurb": "structures delivery (claiming an outcome you measured the start of)"
+}

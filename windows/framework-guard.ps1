@@ -38,9 +38,26 @@ try {
 
     # Marker sets, same rule as the mini: every marker in a set must be present,
     # because `directives/` alone is too weak — plenty of repos have one.
+    #
+    # Read from the registry so a new framework needs no edit here — the whole
+    # point of framework.json is that the registry is data. The built-in map is
+    # a fallback for a machine with no registry checkout: a guard must never
+    # depend on another folder existing.
     $frameworks = @{
         doe = @('directives', 'execution\config.py')
         iae = @('sources', 'findings', 'check_iae.py')
+    }
+    $registry = Join-Path $env:USERPROFILE '.frameworks\frameworks'
+    if (Test-Path $registry) {
+        foreach ($entry in (Get-ChildItem $registry -Directory -ErrorAction SilentlyContinue)) {
+            $manifest = Join-Path $entry.FullName 'framework.json'
+            if (-not (Test-Path $manifest)) { continue }
+            try {
+                $spec = Get-Content $manifest -Raw | ConvertFrom-Json
+                if ($spec.name -and $spec.markers) { $frameworks[$spec.name] = @($spec.markers) }
+            }
+            catch { }
+        }
     }
     foreach ($fw in $frameworks.Keys) {
         $all = $true
@@ -64,11 +81,13 @@ try {
         if ($count -ge 5) { exit 0 }
     }
 
+    $names = (($frameworks.Keys | Sort-Object) -join ', ')
     Write-Output ("FRAMEWORK: $name has no framework applied. The rule is that project " +
-        "folders are built from a template, not by a bare mkdir. Available: doe, iae " +
-        "— doe structures work (automations, scripts, anything with steps to run); " +
-        "iae structures thinking (reading sources and reaching a defensible " +
-        "conclusion). Before starting work here, offer the one that fits and say why; " +
+        "folders are built from a template, not by a bare mkdir. Available: $names " +
+        "— doe structures work (automations, scripts, steps to run); iae structures " +
+        "thinking (reading sources, reaching a defensible conclusion); bpo structures " +
+        "delivery (claiming an outcome you measured the start of). " +
+        "Before starting work here, offer the one that fits and say why; " +
         "ask rather than guess if it is not obvious. Applying one is additive and " +
         "never restructures what is already there. If the user declines, suggest a " +
         ".no-framework file to silence this folder for good.")
