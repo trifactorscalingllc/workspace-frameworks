@@ -34,10 +34,19 @@ try {
     if ($dir.FullName -eq $env:USERPROFILE -or -not $dir.Parent) { exit 0 }
     if (Test-Path (Join-Path $root '.no-doe')) { exit 0 }
 
-    # Both markers, same rule as the mini: `directives/` alone is too weak.
-    $isDoe = (Test-Path (Join-Path $root 'directives')) -and
-             (Test-Path (Join-Path $root 'execution\config.py'))
-    if ($isDoe) { exit 0 }
+    # Marker sets, same rule as the mini: every marker in a set must be present,
+    # because `directives/` alone is too weak — plenty of repos have one.
+    $frameworks = @{
+        doe = @('directives', 'execution\config.py')
+        iae = @('sources', 'findings', 'check_iae.py')
+    }
+    foreach ($fw in $frameworks.Keys) {
+        $all = $true
+        foreach ($m in $frameworks[$fw]) {
+            if (-not (Test-Path (Join-Path $root $m))) { $all = $false; break }
+        }
+        if ($all) { exit 0 }
+    }
 
     $established = @(
         'package.json', 'pyproject.toml', 'Cargo.toml', 'go.mod', 'pom.xml',
@@ -53,12 +62,14 @@ try {
         if ($count -ge 5) { exit 0 }
     }
 
-    Write-Output ("DOE: $name is not a DOE workspace (no directives/ + execution/). " +
-        "The DOE rule says project folders are created from the template, not by a " +
-        "bare mkdir. Before starting project work here, offer to convert it with " +
-        "``doe init`` — additively, never restructuring what is already there. " +
-        "Decline and move on if the user says no, and suggest a .no-doe file to " +
-        "silence this folder for good.")
+    Write-Output ("FRAMEWORK: $name has no framework applied. The rule is that project " +
+        "folders are built from a template, not by a bare mkdir. Available: doe, iae " +
+        "— doe structures work (automations, scripts, anything with steps to run); " +
+        "iae structures thinking (reading sources and reaching a defensible " +
+        "conclusion). Before starting work here, offer the one that fits and say why; " +
+        "ask rather than guess if it is not obvious. Applying one is additive and " +
+        "never restructures what is already there. If the user declines, suggest a " +
+        ".no-doe file to silence this folder for good.")
 }
 catch {
     # Fail open, always. Never block a session from starting.

@@ -64,6 +64,16 @@ function Invoke-Python {
     return $LASTEXITCODE
 }
 
+function Read-Python {
+    <#  Same call, but returns the output instead of displaying it.
+        Needed because Invoke-Python swallows stdout into Out-Host, so it cannot
+        be used to ask a script a question. #>
+    param([string[]]$Arguments)
+    $py = Get-Python
+    $full = $py.Pre + $Arguments
+    return (& $py.Exe @full 2>$null | Out-String)
+}
+
 function Sync-Template {
     if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
         throw "git is required. Install Git for Windows: https://git-scm.com/download/win`n(Claude Code's Bash tool also needs it, so this is not optional.)"
@@ -104,6 +114,8 @@ doe — create or convert a DOE workspace
 
   doe                     apply DOE to the folder you are in (same as: doe init)
   doe init                same as above, explicitly
+  doe iae                 apply the IAE research framework here
+  doe list                show every available framework
   doe "Acme Onboarding"   create a NEW workspace folder here
   doe update              pull the latest template and refresh the installed files
   doe help                this message
@@ -126,18 +138,35 @@ Template: $TemplateDir
         $win = Join-Path $TemplateDir 'windows'
         Copy-Item (Join-Path $win 'doe.ps1')       (Join-Path $binDir 'doe.ps1')          -Force
         Copy-Item (Join-Path $win 'doe-guard.ps1') (Join-Path $claudeDir 'doe-guard.ps1') -Force
-        $slash = Join-Path $win 'doe-command.md'
-        if (Test-Path $slash) { Copy-Item $slash (Join-Path $cmdDir 'doe.md') -Force }
+        # Glob, not a named list: a new framework ships its own <name>-command.md
+        # and must arrive without anyone editing this file.
+        foreach ($cmd in (Get-ChildItem (Join-Path $win '*-command.md') -ErrorAction SilentlyContinue)) {
+            $slug = $cmd.Name -replace '-command\.md$', ''
+            Copy-Item $cmd.FullName (Join-Path $cmdDir "$slug.md") -Force
+        }
         Write-Host "Template and installed files are current." -ForegroundColor Green
         exit 0
     }
+    'list' {
+        Sync-Template
+        exit (Invoke-Python @((Join-Path $TemplateDir 'execution\init_here.py'), '--list'))
+    }
     'init' {
         Sync-Template
-        Write-Host "==> Converting $((Get-Location).Path)" -ForegroundColor Cyan
+        Write-Host "==> Applying doe to $((Get-Location).Path)" -ForegroundColor Cyan
         exit (Invoke-Python @((Join-Path $TemplateDir 'execution\init_here.py'), '--path', (Get-Location).Path))
     }
     default {
         Sync-Template
+        $init = Join-Path $TemplateDir 'execution\init_here.py'
+        # A bare framework name applies that framework here. Anything else is a
+        # workspace name. Ask init_here.py what exists rather than hardcoding the
+        # list, so a new framework works without touching this file.
+        $known = Read-Python @($init, '--list')
+        if ($known -match "(?m)^\s{2}$([regex]::Escape($Name.ToLower()))\s") {
+            Write-Host "==> Applying $($Name.ToLower()) to $((Get-Location).Path)" -ForegroundColor Cyan
+            exit (Invoke-Python @($init, '--framework', $Name.ToLower(), '--path', (Get-Location).Path))
+        }
         exit (Invoke-Python @((Join-Path $TemplateDir 'execution\new_workspace.py'), $Name, '--dest', $Dest, '--open'))
     }
 }

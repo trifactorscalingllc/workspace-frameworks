@@ -44,8 +44,13 @@ New-Item -ItemType Directory -Force -Path $CmdDir | Out-Null
 # --- 1. the command, the hook, and the /doe slash command -------------------
 Copy-Item (Join-Path $Here 'doe.ps1')       (Join-Path $BinDir 'doe.ps1')          -Force
 Copy-Item (Join-Path $Here 'doe-guard.ps1') (Join-Path $ClaudeDir 'doe-guard.ps1') -Force
-Copy-Item (Join-Path $Here 'doe-command.md') (Join-Path $CmdDir 'doe.md')          -Force
-Write-Host "  installed doe.ps1, doe-guard.ps1, and the /doe slash command"
+$slashCount = 0
+foreach ($cmd in (Get-ChildItem (Join-Path $Here '*-command.md') -ErrorAction SilentlyContinue)) {
+    $slug = $cmd.Name -replace '-command\.md$', ''
+    Copy-Item $cmd.FullName (Join-Path $CmdDir "$slug.md") -Force
+    $slashCount++
+}
+Write-Host "  installed doe.ps1, doe-guard.ps1, and $slashCount slash command(s)"
 
 # --- 2. the `doe` function in the PowerShell profile ------------------------
 $marker   = '# --- DOE workspace command (managed by Install-DOE.ps1) ---'
@@ -78,9 +83,11 @@ When standing up a folder for a new job or project, **never bare ``mkdir`` +
 **D**irectives / **O**rchestration / **E**xecution:
 
 ``````powershell
-doe "<Name>"    # create a new workspace here
-doe init        # convert the folder you are already in (additive, refuses to merge)
-doe update      # pull the latest template
+doe             # apply DOE to the folder you are in (additive, refuses to merge)
+doe iae         # apply the IAE research framework instead
+doe list        # show every available framework
+doe "<Name>"    # create a NEW workspace folder here
+doe update      # pull the latest template and refresh the installed files
 ``````
 
 The template lives at ``%USERPROFILE%\.doe-template`` and is a clone of
@@ -89,7 +96,12 @@ directive (``directives/<slug>.md``), NOT in CLAUDE.md — CLAUDE.md/AGENTS.md/
 GEMINI.md are the mirrored DOE operating instructions and stay as the template
 ships them.
 
-A SessionStart hook notices when a folder is not a DOE workspace and says so.
+**Pick the framework that fits.** DOE structures *work* — automations, scripts,
+anything with steps to run. IAE structures *thinking* — reading sources and
+reaching a defensible conclusion, with every claim traceable to a locator and
+every conclusion carrying a falsifier. A project can have both.
+
+A SessionStart hook notices when a folder has no framework applied and says so.
 It never creates anything. Offer ``doe init``; if the user declines, drop a
 ``.no-doe`` file to silence that folder for good.
 
