@@ -9,6 +9,15 @@ assistant's content blocks by message id (one API response = one turn), and repo
   med lines    median non-empty lines         <=8 lines   share of turns at or under 8 lines
   narration    share of turns whose first line opens with "I'll", "Let me", "First", "Now I"...
   tables       share of turns containing a markdown table
+  closing      share of turns whose LAST line is a standalone prose sentence (the closing-line rule,
+               added 2026-09-02) rather than a table row, bullet, header or fenced block
+  labelled     share of those closing lines that announce themselves ("In short", "TL;DR", a bolded
+               lead-in). The rule forbids this, so it should read ~0%
+
+  closing is a floor, not a score. It cannot tell an exempt reply (requested JSON, a file's exact
+  contents) from a violation, and it cannot judge whether the sentence carries the point or just
+  recaps. Both make the number too low, never too high. Negative control: --compare 2026-09-02,
+  before which no such rule existed.
 
   measure.py                        last 14 days, every session
   measure.py --days 7
@@ -16,6 +25,7 @@ assistant's content blocks by message id (one API response = one turn), and repo
   measure.py --by entrypoint        break down by how the session was started (cli, vscode, sdk...)
   measure.py --project tom          only sessions whose project dir name contains "tom"
   measure.py --json
+  measure.py --self-test            check the closing-line detector against known cases, then exit
 
 Sidechains (subagents) are excluded: they talk to Claude, not to you. Times without a
 timezone are read as local time.
@@ -28,6 +38,45 @@ NARRATION = re.compile(
     r"^\s*(?:\*\*)?(?:I['’]ll\b|I will\b|Let me\b|Let['’]s\b|First,? I\b|Now,? I\b|Next,? I\b|"
     r"I['’]m going to\b|I am going to\b|Here['’]s what I['’]ll\b|Before I\b|I need to\b|I['’]m about to\b)", re.I)
 TABLE_ROW = re.compile(r"^\s*\|.*\|\s*$", re.M)
+FENCE = re.compile(r"^\s*(?:```|~~~)")
+# structural shapes that are not a sentence: table row, header, quote, bullet, numbered item
+NOT_A_SENTENCE = re.compile(r"^\s*(?:\||#|>|[-*+]\s|\d+[.)]\s)")
+LABELLED = re.compile(
+    r"^\s*(?:\*\*|__)?\s*(?:tl;?\s?dr|in short|in sum(?:mary)?|to sum up|summary|bottom line|net[- ]net|"
+    r"one[- ]liner?|one[- ]line version|short version|long story short|the point|key )", re.I)
+BOLD_START = re.compile(r"^\s*(?:\*\*|__)")
+
+
+def closing_line(text):
+    """Return (has_closing, is_labelled) for a reply's final line.
+
+    A closing line is the reply's last non-empty line when it is a standalone prose sentence.
+    Anything ending in a fenced block, table, bullet, header or a line ending in ":" has none.
+    """
+    lines = text.splitlines()
+    in_fence = False
+    last = None          # (index, text) of the last non-empty line outside a fence
+    for i, ln in enumerate(lines):
+        if FENCE.match(ln):
+            in_fence = not in_fence
+            last = None  # a fence delimiter is never a closing line, and content resumes after it
+            continue
+        if in_fence or not ln.strip():
+            continue
+        last = (i, ln)
+    if in_fence or last is None:
+        return False, False          # unterminated fence, or the reply ends inside/at one
+    if any(l.strip() for l in lines[last[0] + 1:]):
+        return False, False          # something non-blank followed it (a closed fence's tail)
+    ln = last[1]
+    if ln.startswith("    ") or ln.startswith("\t"):
+        return False, False          # indented code
+    if NOT_A_SENTENCE.match(ln):
+        return False, False
+    core = ln.strip().rstrip("*_`\"'\u201d\u2019)]")
+    if not core or not core.endswith((".", "!", "?")):
+        return False, False          # a fragment, a bare link, or a line ending in ":"
+    return True, bool(LABELLED.match(ln) or BOLD_START.match(ln))
 
 
 def parse_ts(s):
@@ -98,6 +147,8 @@ def stats(turns):
     lines = sorted(sum(1 for ln in t["text"].splitlines() if ln.strip()) for t in turns)
     n = len(turns)
     p90 = words[min(n - 1, int(round(0.9 * (n - 1))))]
+    closings = [closing_line(t["text"]) for t in turns]
+    closed = sum(1 for c, _ in closings if c)
     return {
         "turns": n,
         "med_words": int(statistics.median(words)),
@@ -106,6 +157,8 @@ def stats(turns):
         "le8_lines": sum(1 for x in lines if x <= 8) / n,
         "narration": sum(1 for t in turns if NARRATION.match(t["text"].splitlines()[0])) / n,
         "tables": sum(1 for t in turns if len(TABLE_ROW.findall(t["text"])) >= 2) / n,
+        "closing": sum(1 for c, _ in closings if c) / n,
+        "labelled": (sum(1 for c, lab in closings if c and lab) / closed) if closed else 0.0,
         "total_words": sum(words),
     }
 
@@ -114,10 +167,44 @@ def fmt_row(label, s):
     if s is None:
         return f"{label:<26}{'—':>7}   (no turns)"
     return (f"{label:<26}{s['turns']:>7}{s['med_words']:>11}{s['p90_words']:>11}{s['med_lines']:>11}"
-            f"{s['le8_lines']*100:>10.0f}%{s['narration']*100:>11.0f}%{s['tables']*100:>9.0f}%")
+            f"{s['le8_lines']*100:>10.0f}%{s['narration']*100:>11.0f}%{s['tables']*100:>9.0f}%"
+            f"{s['closing']*100:>9.0f}%{s['labelled']*100:>10.0f}%")
 
 
-HEADER = f"{'window':<26}{'turns':>7}{'med words':>11}{'p90 words':>11}{'med lines':>11}{'<=8 lines':>11}{'narration':>12}{'tables':>10}"
+HEADER = (f"{'window':<26}{'turns':>7}{'med words':>11}{'p90 words':>11}{'med lines':>11}"
+          f"{'<=8 lines':>11}{'narration':>12}{'tables':>10}{'closing':>10}{'labelled':>11}")
+
+
+SELF_TEST = [
+    # (text, expected has_closing, expected labelled)
+    ("The token was stale. Rotated it and the run passes now.", True, False),
+    ("Fixed.", True, False),
+    ("Nothing changed; the file was already correct.", True, False),
+    ("Which port should it bind to?", True, False),
+    ("**In short:** the token was stale.", True, True),
+    ("Done.\n\nTL;DR the cache was the problem.", True, True),
+    ("**The receiver now starts clean.**", True, True),
+    ("Here is the fix:\n\n```bash\nmake install\n```", False, False),
+    ("| port | 8087 |\n| label | runner |", False, False),
+    ("Three things broke:\n- auth\n- the port\n- the plist", False, False),
+    ("## What changed", False, False),
+    ("Run this: ", False, False),
+    ("See [the log](https://example.com/log)", False, False),
+    ("Opened a fence and never closed it:\n```bash\nls", False, False),
+    ("```bash\nls\n```\nThat lists it.", True, False),
+]
+
+
+def self_test():
+    bad = 0
+    for text, want_c, want_l in SELF_TEST:
+        got_c, got_l = closing_line(text)
+        ok = (got_c, got_l) == (want_c, want_l)
+        bad += not ok
+        if not ok:
+            print(f"FAIL  closing={got_c} labelled={got_l}  want {want_c}/{want_l}  {text!r}")
+    print(f"{len(SELF_TEST) - bad}/{len(SELF_TEST)} closing-line cases pass")
+    return 1 if bad else 0
 
 
 def main():
@@ -128,8 +215,11 @@ def main():
     ap.add_argument("--project", help="only project dirs whose name contains this")
     ap.add_argument("--include-sidechain", action="store_true", help="include subagent turns")
     ap.add_argument("--json", action="store_true")
+    ap.add_argument("--self-test", action="store_true", help="check the closing-line detector and exit")
     ap.add_argument("--projects-dir", default=os.path.join(os.environ.get("CLAUDE_CONFIG_DIR", os.path.expanduser("~/.claude")), "projects"))
     a = ap.parse_args()
+    if a.self_test:
+        sys.exit(self_test())
 
     now = datetime.now(timezone.utc)
     if a.compare:
@@ -166,6 +256,8 @@ def main():
             print(fmt_row(label, s))
     print()
     print("narration = first line opens with I'll / Let me / First / Now I ...   tables = 2+ markdown table rows")
+    print("closing   = last line is a standalone prose sentence (rule added 2026-09-02; --compare 2026-09-02 is its control)")
+    print("labelled  = share of those closing lines announcing themselves (In short / TL;DR / bold lead-in) — must be ~0%")
 
 
 if __name__ == "__main__":

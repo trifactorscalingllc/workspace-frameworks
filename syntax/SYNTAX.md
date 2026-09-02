@@ -5,7 +5,8 @@ condensed reasoning. It is **not a workspace framework**: DOE, IAE and BPO shape
 Syntax shapes how Claude *talks to you*, everywhere, in every present and future workspace.
 It is installed once per machine into the user's Claude config and versioned in this repo.
 
-Decided 2026-09-01 (Evan). Source of truth for the rules: [plain-english.md](plain-english.md).
+Decided 2026-09-01 (Evan); the closing-line rule added 2026-09-02 (Evan). Source of truth for the
+rules: [plain-english.md](plain-english.md).
 
 ## How it works
 
@@ -30,6 +31,12 @@ project `.claude/settings.local.json` → `--settings` flag on a spawn → manag
 | Situation | Rule | Why it needs saying |
 |---|---|---|
 | Default reply | Answer first, under 8 lines | The whole point |
+| Last line of every reply | One plain sentence carrying the point: what changed, the answer, or the decision owed. Every reply, not only long ones | Evan 2026-09-02: watching a long explanation collapse into one final sentence, he wanted that line deliberate rather than accidental |
+| Closing line vs recap | A recap repeats what was just said, in the same register. The closing line is the point compressed, and is often the next action instead of a summary | The style already says "never recap". Without this distinction written into the rule itself, the two read as a contradiction and get applied inconsistently |
+| Labelling the closing line | Never. No "In short", "TL;DR", "One-line version", "Bottom line", no bold lead-in. It is simply the last line | A label announces a summary, which invites a summary. Unlabelled forces the sentence to stand on its own |
+| Closing line when asking | The question *is* the last line; nothing follows it | Two rules both claim the last line; the question wins |
+| Closing line exemptions | None on machine-readable output (JSON, CSV, code, a file's exact contents), documents, or Discord | A sentence appended to requested JSON breaks whatever parses it. The closing line inherits every exemption the style already has |
+| Whole-reply compression | Hold every line to the closing line's standard: one idea, and no clause the sentence survives without | Evan's phrasing was "make every output into one-liner concision" — the rule is compression throughout, not one good sentence bolted onto a loose reply |
 | Numbers / comparisons | Table, never prose | Already a fleet rule; repeated because it is the #1 source of verbosity |
 | Chart vs table | Chart only when the *shape* of the data is the point (trend, distribution) and a table cannot show it. Render with the media engine, deliver as a public link | Charts are slow and mostly decorative. Discord CDN links expire in ~24h, so a durable chart needs a funneled host |
 | Clarifying question | Only when different answers change the work. One question, alone on the last line. Otherwise state the assumption and proceed | Stops both over-asking and silent wrong assumptions |
@@ -93,8 +100,18 @@ short: it rides in every prompt. Never edit the installed copy under `~/.claude/
 ## Measuring it
 
 `python3 syntax/measure.py` reads the local transcripts and reports, per assistant turn: median words,
-share of turns under 8 lines, share opening with narration ("I'll…", "Let me…"), share using a table.
-`--compare <ISO time>` prints before/after around the install. Take the baseline **before** installing.
+share of turns under 8 lines, share opening with narration ("I'll…", "Let me…"), share using a table,
+share ending in a **closing** line (a standalone prose sentence as the final line — not a table row,
+bullet, header or fenced block), and share of those that were **labelled** ("In short", "TL;DR"), which
+the rule forbids and should read ~0%.
+`--compare <ISO time>` prints before/after around a change. Take the baseline **before** installing.
+The negative control for the closing-line rule is built in: turns written before 2026-09-02 had no such
+rule, so `--compare 2026-09-02` should show `closing` climbing across the split. If it does not move, the
+style did not reach those sessions — check that they were started after the edit.
+
+Two things the closing-line metric cannot see, so read it as a floor, not a score: it cannot tell an
+exempt reply (requested JSON, a file dump) from a violation, and it cannot judge whether the sentence
+carries the point or merely recaps. Both drag the number down honestly rather than inflating it.
 
 ## Known gaps (2026-09-01)
 
