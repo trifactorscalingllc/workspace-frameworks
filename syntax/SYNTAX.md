@@ -102,6 +102,10 @@ share of turns under 8 lines, share opening with narration ("I'llâ€¦", "Let meâ€
    `Install-Frameworks.ps1`. `syntax/install.sh` is the first mac-side installer piece; parity is a follow-up.
 2. Gemini parity is partial (see the surfaces table). Full parity needs a pointer in the DOE template's
    CLAUDE.md, which the fleet rule says stays as shipped. Founder call.
-3. Bot-only off is a spawn flag, documented, not wired.
+3. Bot-only off is a spawn flag. On the mini the 15 spawners that parse the model's reply as structured data
+   (tom/jobs fleet-doctor, grade-checker, hook-lab, canva-edit, the two carousel jobs; shared/ canva-composer,
+   canva-editor, cc-canva-composer, call-recorder, tune, fathom-ingest; Dionet wins + testimonials; PB wins) pass
+   `--settings '{"outputStyle":"default"}'`. Keep the flag when touching those spawn arrays. Free-text bot
+   replies (Discord, SMS, console) stay on Plain English on purpose.
 4. The harness's own "say what you are about to do" line may survive as one preamble line. `measure.py` shows it.
 5. `frame list` and `init_here.py --list` do not show Syntax, on purpose. `/frameworks` mentions it in one line.
