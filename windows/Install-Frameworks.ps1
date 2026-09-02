@@ -8,11 +8,13 @@
       bin\frame.ps1        the `frame` command (apply / create / update)
       bin\doe.ps1          a shim so the old `doe` name keeps working
       framework-guard.ps1  a SessionStart hook that notices an unframed folder
-      commands\*.md        the /doe, /iae and /frameworks slash commands
+      commands\*.md        the /doe, /iae, /frameworks and /syntax slash commands
       CLAUDE.md            the framework rule, laptop-scoped
+      output-styles\plain-english.md   Syntax, the machine-wide Plain English reply style
 
-    ...adds `frame` and `doe` functions to your PowerShell profile, and registers
-    the hook in settings.json.
+    ...adds `frame` and `doe` functions to your PowerShell profile, registers the
+    hook in settings.json, and selects the Plain English output style there (only
+    when the key is absent, so a `frame syntax off` survives a re-run).
 
     Everything is additive and re-runnable. Your existing settings.json keys,
     hooks and profile contents are preserved; a timestamped backup is written
@@ -130,7 +132,7 @@ if ((Test-Path $claudeMd) -and -not $Force) {
     $existing = Get-Content $claudeMd -Raw
     if ($existing -notmatch 'gets a framework') {
         Backup $claudeMd
-        Add-Content $claudeMd "`n$rule`n"
+        Add-Content $claudeMd "`n$rule`n" -Encoding UTF8
         Write-Host "  appended the DOE rule to your existing CLAUDE.md"
     }
     else {
@@ -175,8 +177,64 @@ else {
     Write-Host "  registered the SessionStart hook"
 }
 
+# --- 5. Syntax: the machine-wide Plain English reply style ------------------
+# Not a framework: frameworks shape a project, Syntax shapes how Claude talks to
+# you, in every workspace. Source of truth is ..\syntax\ in the registry.
+$syntaxDir = Join-Path (Split-Path -Parent $Here) 'syntax'
+$styleSrc  = Join-Path $syntaxDir 'plain-english.md'
+if (Test-Path $styleSrc) {
+    $styleDir = Join-Path $ClaudeDir 'output-styles'
+    New-Item -ItemType Directory -Force -Path $styleDir | Out-Null
+    Copy-Item $styleSrc (Join-Path $styleDir 'plain-english.md') -Force
+
+    # Re-read: step 4 may have just rewritten settings.json.
+    # -Encoding UTF8 on every read: Windows PowerShell 5.1 otherwise decodes a
+    # BOM-less file as ANSI and re-encodes the mojibake as UTF-8 on write.
+    $settings = if (Test-Path $settingsPath) { Get-Content $settingsPath -Raw -Encoding UTF8 | ConvertFrom-Json } else { [pscustomobject]@{} }
+    $h = [ordered]@{}
+    foreach ($p in $settings.PSObject.Properties) { $h[$p.Name] = $p.Value }
+    $set = @()
+    if (-not $h.ContainsKey('outputStyle'))           { $h['outputStyle'] = 'Plain English'; $set += 'outputStyle = Plain English' }
+    if (-not $h.ContainsKey('showThinkingSummaries')) { $h['showThinkingSummaries'] = $true;  $set += 'showThinkingSummaries = true' }
+    if ($set.Count -gt 0) {
+        Backup $settingsPath
+        ($h | ConvertTo-Json -Depth 20) | Set-Content "$settingsPath.tmp" -Encoding UTF8
+        Move-Item "$settingsPath.tmp" $settingsPath -Force
+        Write-Host "  settings.json: $($set -join ', ')"
+    }
+    else {
+        Write-Host "  settings.json already has outputStyle / showThinkingSummaries (left as set)"
+    }
+
+    # The rule in CLAUDE.md, shared word-for-word with the mac installer, between
+    # <!-- syntax:begin --> / <!-- syntax:end --> so it can be lifted or refreshed.
+    $sectionFile = Join-Path $syntaxDir 'CLAUDE-section.md'
+    if (Test-Path $sectionFile) {
+        $block = (Get-Content $sectionFile -Raw -Encoding UTF8).Trim()
+        $existing = if (Test-Path $claudeMd) { Get-Content $claudeMd -Raw -Encoding UTF8 } else { '' }
+        $pattern = '(?s)<!-- syntax:begin -->.*?<!-- syntax:end -->'
+        $m = [regex]::Match($existing, $pattern)
+        if ($m.Success -and $m.Value -eq $block) {
+            Write-Host "  CLAUDE.md already states the Syntax rule"
+        }
+        else {
+            Backup $claudeMd
+            if ($m.Success) { $existing = [regex]::Replace($existing, $pattern, [System.Text.RegularExpressions.MatchEvaluator]{ param($x) $block }) }
+            else            { $existing = $existing.TrimEnd() + "`n`n" + $block + "`n" }
+            Set-Content "$claudeMd.tmp" $existing -Encoding UTF8
+            Move-Item "$claudeMd.tmp" $claudeMd -Force
+            Write-Host "  CLAUDE.md: $(if ($m.Success) { 'refreshed' } else { 'appended' }) the Syntax rule"
+        }
+    }
+    Write-Host "  installed Syntax (Plain English output style). frame syntax status|on|off"
+}
+else {
+    Write-Host "  registry has no syntax\ yet; skipping Syntax" -ForegroundColor Yellow
+}
+
 Write-Host ""
 Write-Host "Done." -ForegroundColor Green
 Write-Host "Open a NEW terminal, then try:  frame list" -ForegroundColor Green
 Write-Host "In Claude, /doe and /iae apply a framework to the folder you are in."
 Write-Host "A new session in an unframed folder will offer one on its own."
+Write-Host "New chats answer in Plain English (Syntax). frame syntax off turns it off; Ctrl+Alt+F in VS Code hides tool calls."

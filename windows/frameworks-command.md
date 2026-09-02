@@ -26,3 +26,7 @@ on the spot. The rule is that a new framework gets extracted from a project that
 already worked, never invented in advance — a skeleton nobody has used is one
 nobody maintains, and a stale one instructs the next session to work against a
 layout that is no longer right.
+
+Syntax is NOT a framework and is not in that list: it is the machine-wide reply style
+(Plain English output style + summarized thinking), managed with `/syntax` or `frame syntax status|on|off`.
+Mention it in one line only if the user asks about reply length or tone.

@@ -21,10 +21,13 @@
     frame list               # every available framework
     frame "Acme Onboarding"  # new workspace in the current directory
     frame update             # refresh the registry and the installed files
+    frame syntax off         # the machine-wide Plain English reply style: status|on|off
 #>
 [CmdletBinding()]
 param(
     [Parameter(Position = 0)][string]$Name,
+    [Parameter(Position = 1)][string]$Arg,
+    [Parameter(Position = 2)][string]$Arg2,
     [string]$Dest = (Get-Location).Path
 )
 
@@ -150,6 +153,8 @@ frame — apply a workspace framework, or create a new workspace
   frame list                every available framework
   frame "Acme Onboarding"   create a NEW workspace folder here
   frame update              refresh the registry and the installed files
+  frame syntax [status|on|off|thinking summary|full]
+                            the machine-wide Plain English reply style (not a framework)
   frame help                this message
 
 `doe` is an alias for this command and still works.
@@ -202,16 +207,60 @@ Registry: $TemplateDir
         Write-Host "Registry and installed files are current." -ForegroundColor Green
         exit 0
     }
+    'syntax' {
+        # The machine-wide reply style: the Plain English output style plus
+        # summarized thinking. Not a framework — it applies in every workspace.
+        # Edits %USERPROFILE%\.claude\settings.json only; the next new chat picks
+        # it up. The style file itself is installed by `frame update`.
+        $settingsPath = Join-Path $env:USERPROFILE '.claude\settings.json'
+        # -Encoding UTF8: PS 5.1 reads a BOM-less file as ANSI otherwise. [ordered]: keep key order stable.
+        $settings = if (Test-Path $settingsPath) { Get-Content $settingsPath -Raw -Encoding UTF8 | ConvertFrom-Json } else { [pscustomobject]@{} }
+        $h = [ordered]@{}
+        foreach ($p in $settings.PSObject.Properties) { $h[$p.Name] = $p.Value }
+        $verb = ($Arg + '').ToLower()
+        $what = ($Arg2 + '').ToLower()
+        $save = $true
+        switch ($verb) {
+            ''         { $save = $false }
+            'status'   { $save = $false }
+            'on'       { $h['outputStyle'] = 'Plain English' }
+            'off'      { $h['outputStyle'] = 'default' }
+            'thinking' {
+                switch ($what) {
+                    'summary' { $h['showThinkingSummaries'] = $true }
+                    'full'    { $h.Remove('showThinkingSummaries') }
+                    default   { Write-Host "usage: frame syntax thinking summary|full"; exit 2 }
+                }
+            }
+            default    { Write-Host "usage: frame syntax [status|on|off|thinking summary|full]"; exit 2 }
+        }
+        if ($save) {
+            if (Test-Path $settingsPath) { Copy-Item $settingsPath "$settingsPath.bak-syntax" -Force }
+            ($h | ConvertTo-Json -Depth 20) | Set-Content "$settingsPath.tmp" -Encoding UTF8
+            Move-Item "$settingsPath.tmp" $settingsPath -Force
+        }
+        $style = if ($h.ContainsKey('outputStyle')) { [string]$h['outputStyle'] } else { 'default' }
+        $state = if ($style -eq 'Plain English') { 'on' } elseif ($style -eq 'default') { 'off' } else { "other ($style)" }
+        $think = if ($h.ContainsKey('showThinkingSummaries') -and $h['showThinkingSummaries']) { 'summary' } else { 'full' }
+        $tail  = if ($save) { ' - takes effect on the next new chat' } else { '' }
+        Write-Host "Syntax: $state | thinking: $think$tail"
+        exit 0
+    }
     'list' {
+        if ($Arg) { throw "unexpected argument '$Arg' (usage: frame list)" }
         Sync-Template
         exit (Invoke-Python @((Join-Path $TemplateDir 'execution\init_here.py'), '--list'))
     }
     'init' {
+        if ($Arg) { throw "unexpected argument '$Arg' (usage: frame, or frame <framework>, or frame ""<Workspace Name>"")" }
         Sync-Template
         Write-Host "==> Applying doe to $((Get-Location).Path)" -ForegroundColor Cyan  # default framework
         exit (Invoke-Python @((Join-Path $TemplateDir 'execution\init_here.py'), '--path', (Get-Location).Path))
     }
     default {
+        # Quote a multi-word workspace name. Before Position 1 existed this was a
+        # binding error; now it would silently create a workspace named by the first word.
+        if ($Arg) { throw "unexpected argument '$Arg'. Quote a multi-word name: frame ""$Name $Arg""" }
         Sync-Template
         $init = Join-Path $TemplateDir 'execution\init_here.py'
         # A bare framework name applies that framework here. Anything else is a
