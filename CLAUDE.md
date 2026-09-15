@@ -4,6 +4,21 @@
 
 You operate within a 3-layer architecture that separates concerns to maximize reliability. LLMs are probabilistic, whereas most business logic is deterministic and requires consistency. This system fixes that mismatch.
 
+## Rolling context — read it FIRST, update it after (every agent, every session)
+
+`CONTEXT.md` in this workspace is the **shared, agent-agnostic memory**. Because AGENTS.md and GEMINI.md
+are the same file as this one, the rule is one rule for Claude, Codex and Antigravity/Gemini alike:
+
+1. **On start, READ `CONTEXT.md` before anything else** — before exploring the folder or re-reading old
+   work. It tells you where the project stands, what's in progress, and the next step, so you pick up
+   where the last agent (or your last session) left off instead of re-deriving it.
+2. **When you finish a chunk of work — or before you hand off, switch tools, or run low on usage —
+   UPDATE `CONTEXT.md`:** refresh *Where we are* and *Next steps*, and stamp *Last updated* with your
+   agent name + today's date. Keep it short (current state, not a log); if nothing changed, leave it.
+
+This is the mechanism that lets you switch between Claude, Codex and Antigravity mid-project without
+losing the thread. Treat it as load-bearing, not optional.
+
 ## The 3-Layer Architecture
 
 **Layer 1: Directive (What to do)**
@@ -23,6 +38,51 @@ You operate within a 3-layer architecture that separates concerns to maximize re
 - Reliable, testable, fast. Use scripts instead of manual work.
 
 **Why this works:** if you do everything yourself, errors compound. 90% accuracy per step = 59% success over 5 steps. The solution is push complexity into deterministic code. That way you just focus on decision-making.
+
+### Why Layer 3 is Python (and when it would not be)
+
+This gets re-asked every time someone reads "deterministic Python scripts" and wonders whether
+C, C++, Rust or Go would be faster. **It would not be.** The answer is settled; do not reopen it
+without new measurements.
+
+Layer 3 is I/O-bound orchestration: shell out to a tool, call an HTTPS endpoint, shuffle JSON.
+Measured on the mini, 2026-09-01:
+
+| | |
+|---|---|
+| Python cold start, bare | 10–20 ms |
+| Cold start + `requests` | 80 ms |
+| Cold start + `googleapiclient` | 110 ms |
+| One Google Sheets round trip | 200–600 ms |
+| A directive run's budget (`RUN_TIMEOUT`) | 900,000 ms |
+
+The interpreter is ~0.1s against network calls and model runs measured in seconds to minutes.
+A compiled rewrite competes for **0.01%** of a run while costing a toolchain, a build step, and
+a third language in a fleet that already runs Node and Python. C and C++ are worse still: no
+stdlib HTTP/TLS/JSON, and manual string handling over untrusted API payloads is a security
+liability, not an accuracy gain.
+
+**Three rules that follow from this:**
+
+1. **Get compiled speed by calling it, never by owning it.** ffmpeg and Pillow are C, numpy is C,
+   polars is Rust. Reach for the library; do not write the language.
+2. **Measure before you optimise anything, and measure the right thing.** The worked example is
+   in this repo: `preflight_topic.py` took **658 seconds**, and the instinct was to parallelise its
+   nine probes. Profiling showed one probe (`inbound_symlinks`) was 657.5s of it and the other
+   eight were 0.5s combined — so concurrency would have bought 1.0008x. Pruning `~/Library` from
+   the walk bought **18x**. The bottleneck is almost never the language and often not even the
+   thing you assumed. See `HOME_PRUNE_DIRS` in `execution/lib/topics.py`.
+3. **For genuinely independent I/O, reach for threads, not a rewrite.** `concurrent.futures.
+   ThreadPoolExecutor` around independent API calls is stdlib and measured **3.1x** on
+   `cockpit_snapshot.py` for about fifteen lines. The GIL does not apply — a thread releases it
+   while blocked on a socket.
+
+**The escape hatch, if a real CPU hot loop is ever *measured*** (not suspected): PyO3 to move that
+one function to Rust while Python keeps the orchestration, or Go for a standalone daemon that must
+ship as one binary to a host with no Python — the pain that already forced
+`execution/local_webhook.py` to be stdlib-only. Go, not Rust, is the right reach there: faster
+compiles, trivial concurrency, stdlib HTTP+JSON. **The measurement is the prerequisite, not a
+formality.**
 
 ## Operating Principles
 

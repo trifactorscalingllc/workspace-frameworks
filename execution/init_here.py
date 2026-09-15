@@ -42,7 +42,7 @@ DOE = {
     "description": "Automation and ops. Markdown SOPs, a model that routes, deterministic Python.",
     "source": TEMPLATE,
     "dirs": ("directives", "execution"),
-    "files": ("CLAUDE.md", "AGENTS.md", "GEMINI.md", "requirements.txt", ".env.example"),
+    "files": ("CLAUDE.md", "AGENTS.md", "GEMINI.md", "CONTEXT.md", "requirements.txt", ".env.example"),
     "optional_dirs": (".vscode",),
     "markers": ("directives", "execution/config.py"),
     "bootstrap": True,
